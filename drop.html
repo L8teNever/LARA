@@ -111,7 +111,18 @@
             <p id="no-peers" style="text-align: center; padding: 40px; opacity: 0.5;">No one nearby yet...</p>
         </section>
 
-        <div id="incoming-container"></div>
+        <section class="card" id="my-drops-section" style="margin-top: 24px; display: none;">
+            <h2 class="section-title">My Active Drops</h2>
+            <p style="font-size: 14px; opacity: 0.7; margin-bottom: 20px;">Files you are currently sharing with others
+            </p>
+            <div id="my-active-drops" style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Your outgoing drops here -->
+            </div>
+        </section>
+
+        <section id="incoming-section" style="margin-top: 24px;">
+            <div id="incoming-container"></div>
+        </section>
     </main>
 
     <script>
@@ -152,7 +163,8 @@
             setInterval(fetchPeers, 3000);
             fetchPeers();
 
-            setInterval(checkIncoming, 4000);
+            setInterval(checkActivity, 4000);
+            checkActivity();
         }
 
         async function registerMe() {
@@ -219,18 +231,22 @@
 
             try {
                 const res = await fetch('/api/upload', { method: 'POST', body: formData });
-                if (res.ok) alert(`Files dropped to ${target.name}!`);
+                if (res.ok) {
+                    alert(`Files dropped to ${target.name}!`);
+                    checkActivity();
+                }
                 else alert("Drop failed!");
                 fileInput.value = '';
             } catch (e) { alert("Error sending files"); }
         }
 
-        async function checkIncoming() {
+        async function checkActivity() {
             let url = '/api/discover';
             if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
             const res = await fetch(url);
             const shares = await res.json();
 
+            // 1. Check Incoming
             const incoming = shares.filter(s => s.target_peer_id === myId);
             const container = document.getElementById('incoming-container');
 
@@ -252,6 +268,41 @@
                 `;
                 container.prepend(div);
             });
+
+            // 2. Check My Outgoing Drops
+            // Filter shares by uploader IP (simplified) or if we had a persistent uploader ID
+            // For now, we use IP as uploader identification
+            const myDrops = shares.filter(s => s.target_peer_id && s.uploader_name === myName);
+            const myDropsList = document.getElementById('my-active-drops');
+            const myDropsSection = document.getElementById('my-drops-section');
+
+            if (myDrops.length > 0) {
+                myDropsSection.style.display = 'block';
+                myDropsList.innerHTML = '';
+                myDrops.forEach(s => {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    item.style.background = 'rgba(0,0,0,0.03)';
+                    item.innerHTML = `
+                        <div class="file-info">
+                            <span class="file-name" style="font-weight: 600;">To: ${s.target_peer_id}</span>
+                            <span class="file-meta">${s.files.length} file(s) • ${timeAgo(s.timestamp)}</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--md-sys-color-primary); font-weight: 600;">ACTIVE</div>
+                    `;
+                    myDropsList.appendChild(item);
+                });
+            } else {
+                myDropsSection.style.display = 'none';
+            }
+        }
+
+        function timeAgo(timestamp) {
+            const seconds = Math.floor((new Date() - new Date(timestamp * 1000)) / 1000);
+            if (seconds < 60) return 'just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            return 'recently';
         }
     </script>
 </body>
