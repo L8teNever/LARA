@@ -36,6 +36,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: blob:; "
             "connect-src 'self'; "
+            "manifest-src 'self'; "
+            "worker-src 'self'; "
             "frame-ancestors 'none';"
         )
         return response
@@ -89,6 +91,11 @@ class Peer(BaseModel):
 
 files_metadata: List[shared_bundle] = []
 active_peers: List[Peer] = []
+
+# Ultrasonic proximity pings: peer_id -> timestamp of last ping sent
+ultrasonic_pings: dict = {}  # { peer_id: float(timestamp) }
+# Confirmed ultrasonic pairs: frozenset({id_a, id_b}) -> expiry timestamp
+ultrasonic_pairs: dict = {}  # { frozenset: float(expiry) }
 
 def is_nearby_geo(lat1, lon1, src1, lat2, lon2, src2) -> bool:
     """Check if two coordinates are nearby, with dynamic radius based on source accuracy.
@@ -248,8 +255,48 @@ async def register_peer(request: Request, peer: Peer):
     active_peers.append(peer)
     return {"status": "ok"}
 
+@app.get("/api/peers/all-ids")
+async def all_peer_ids():
+    """Return all currently registered peer IDs for ultrasonic cross-referencing"""
+    now = time.time()
+    return [p.id for p in active_peers if now - p.last_seen < 30]
+
+@app.post("/api/ultrasonic/ping")
+async def ultrasonic_ping(request: Request, data: dict):
+    """Register that this peer is currently emitting an ultrasonic tone"""
+    peer_id = data.get("peer_id")
+    if not peer_id:
+        raise HTTPException(status_code=400, detail="peer_id required")
+    ultrasonic_pings[peer_id] = time.time()
+    return {"status": "ok"}
+
+@app.post("/api/ultrasonic/heard")
+async def ultrasonic_heard(request: Request, data: dict):
+    """Report that this peer heard another peer's ultrasonic tone"""
+    listener_id = data.get("listener_id")
+    heard_ids = data.get("heard_ids", [])
+    if not listener_id:
+        raise HTTPException(status_code=400, detail="listener_id required")
+
+    now = time.time()
+    confirmed = []
+    for emitter_id in heard_ids:
+        # Only confirm if the emitter actually pinged recently (within 15s)
+        ping_time = ultrasonic_pings.get(emitter_id)
+        if ping_time and now - ping_time < 15:
+            pair_key = frozenset({listener_id, emitter_id})
+            ultrasonic_pairs[pair_key] = now + 300  # 5 min expiry
+            confirmed.append(emitter_id)
+
+    # Cleanup expired pairs
+    expired = [k for k, v in ultrasonic_pairs.items() if v < now]
+    for k in expired:
+        del ultrasonic_pairs[k]
+
+    return {"status": "ok", "confirmed": confirmed}
+
 @app.get("/api/peers/discover")
-async def discover_peers(request: Request, lat: Optional[float] = None, lon: Optional[float] = None, coord_source: Optional[str] = None):
+async def discover_peers(request: Request, lat: Optional[float] = None, lon: Optional[float] = None, coord_source: Optional[str] = None, peer_id: Optional[str] = None):
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
     now = time.time()
@@ -261,6 +308,11 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
     if lat is None or lon is None:
         lat, lon = ip_to_coords(client_ip)
         client_coord_source = "ip"
+
+    # Cleanup expired ultrasonic pairs
+    expired_pairs = [k for k, v in ultrasonic_pairs.items() if v < now]
+    for k in expired_pairs:
+        del ultrasonic_pairs[k]
 
     # Cleanup old peers (not seen for 30s)
     to_remove = [p for p in active_peers if now - p.last_seen > 30]
@@ -279,9 +331,21 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
         if is_nearby_geo(lat, lon, client_coord_source, p.lat, p.lon, p.coord_source or "gps"):
             sources.append("Location")
 
+        # 3. Ultrasonic proximity — confirmed pair within 5min window
+        if peer_id:
+            pair_key = frozenset({peer_id, p.id})
+            if pair_key in ultrasonic_pairs and ultrasonic_pairs[pair_key] > now:
+                sources.append("Ultrasonic")
+
         if sources:
             p_copy = p.copy()
-            p_copy.source = "Network" if "Network" in sources else "Location"
+            # Priority: Ultrasonic > Network > Location
+            if "Ultrasonic" in sources:
+                p_copy.source = "Ultrasonic"
+            elif "Network" in sources:
+                p_copy.source = "Network"
+            else:
+                p_copy.source = "Location"
             nearby_peers.append(p_copy)
     return nearby_peers
 
@@ -433,6 +497,20 @@ async def startup_event():
 async def redirect_drop():
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/")
+
+# PWA: manifest and service worker
+from fastapi.responses import JSONResponse
+
+@app.get("/manifest.json")
+async def get_manifest():
+    with open("manifest.json", "r", encoding="utf-8") as f:
+        import json as _json
+        return JSONResponse(content=_json.load(f), media_type="application/manifest+json")
+
+@app.get("/sw.js")
+async def get_sw():
+    return FileResponse("sw.js", media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
 
 # Serve static files (Frontend)
 app.mount("/static", StaticFiles(directory="."), name="static")

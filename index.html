@@ -5,6 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>LARA | Universal Material Sharing</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#6750A4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="LARA">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -444,6 +450,47 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Ultrasonic Discovery -->
+                    <div class="m3-card p-4 sm:p-6 border border-white">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 sm:gap-4">
+                                <div class="p-2 bg-orange-50 text-orange-600 rounded-xl"><i data-lucide="radio"
+                                        class="w-5 h-5 sm:w-6 sm:h-6"></i></div>
+                                <div>
+                                    <p class="font-bold text-sm sm:text-base">Ultraschall-Erkennung</p>
+                                    <p class="text-xs font-bold" id="sonic-status-text" style="color: #9ca3af;">Inaktiv</p>
+                                </div>
+                            </div>
+                            <button onclick="toggleUltrasonic()" id="sonic-toggle-btn"
+                                class="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs active:scale-95 transition-transform">
+                                Aktivieren
+                            </button>
+                        </div>
+                        <!-- Mic Test -->
+                        <div id="sonic-details" class="mt-4 hidden">
+                            <div class="bg-white/60 rounded-2xl p-3 sm:p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs text-gray-500">Mikrofon-Empfindlichkeit (19.5 kHz)</p>
+                                    <button onclick="testMicrophone()" class="text-[10px] font-bold text-purple-600 bg-purple-50 px-3 py-1 rounded-full">
+                                        Testen
+                                    </button>
+                                </div>
+                                <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div id="sonic-mic-level" class="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-200" style="width: 0%"></div>
+                                </div>
+                                <p class="text-[10px] text-gray-400" id="sonic-mic-result"></p>
+                                <div class="flex items-center gap-2 pt-1">
+                                    <div class="w-2 h-2 rounded-full" id="sonic-emit-dot" style="background:#d1d5db"></div>
+                                    <p class="text-[10px] text-gray-500">Sender: <span id="sonic-emit-status">Aus</span></p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full" id="sonic-listen-dot" style="background:#d1d5db"></div>
+                                    <p class="text-[10px] text-gray-500">Empfänger: <span id="sonic-listen-status">Aus</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -631,6 +678,11 @@
             setInterval(fetchPeers, 3000); fetchPeers();
             setInterval(refreshActivity, 4000); refreshActivity();
 
+            // Auto-start ultrasonic if previously enabled
+            if (localStorage.getItem('lara_sonic') === 'on') {
+                startUltrasonic();
+            }
+
             const radar = document.getElementById('radar-container');
             radar.ondragover = (e) => { e.preventDefault(); radar.style.background = 'rgba(103, 80, 164, 0.1)'; };
             radar.ondragleave = () => radar.style.background = '';
@@ -656,10 +708,11 @@
         }
 
         let currentPeerIds = new Set();
+        let allKnownPeerIds = [];
 
         async function fetchPeers() {
-            let url = '/api/peers/discover';
-            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}&coord_source=${userCoords.source || 'gps'}`;
+            let url = `/api/peers/discover?peer_id=${encodeURIComponent(myId)}`;
+            if (userCoords.lat) url += `&lat=${userCoords.lat}&lon=${userCoords.lon}&coord_source=${userCoords.source || 'gps'}`;
             const res = await fetch(url); const peers = await res.json();
             const container = document.getElementById('nearby-peers-radar');
             const others = peers.filter(p => p.id !== myId);
@@ -699,11 +752,11 @@
                 node.style.setProperty('--tx', x + 'px');
                 node.style.setProperty('--ty', y + 'px');
                 node.onclick = () => startDrop(p);
-                const color = p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
+                const color = p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
                 node.innerHTML = `
                     <div class="relative w-11 h-11 sm:w-14 sm:h-14 ${color} rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform">
                         <i data-lucide="smartphone" class="w-5 h-5 sm:w-6 sm:h-6"></i>
-                        <div class="connection-badge ${color} p-0.5 sm:p-1 rounded-full border-2 border-white"><i data-lucide="${p.source === 'Network' ? 'wifi' : 'map-pin'}" class="w-2 h-2 sm:w-2.5 sm:h-2.5"></i></div>
+                        <div class="connection-badge ${color} p-0.5 sm:p-1 rounded-full border-2 border-white"><i data-lucide="${p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin'}" class="w-2 h-2 sm:w-2.5 sm:h-2.5"></i></div>
                     </div>
                     <div class="mt-1.5 sm:mt-2 bg-white/90 backdrop-blur px-1.5 sm:px-2 py-0.5 rounded-full shadow-sm border text-center">
                         <span class="text-[8px] sm:text-[9px] font-bold text-gray-800 truncate block max-w-[56px] sm:max-w-[72px]">${p.name}</span>
@@ -953,6 +1006,234 @@
         function showMessage(h) { document.getElementById('modal-content').innerHTML = h; document.getElementById('modal-backdrop').classList.remove('hidden'); }
         function closeModal() { document.getElementById('modal-backdrop').classList.add('hidden'); }
         function timeAgo(t) { const s = Math.floor((Date.now() / 1000) - t); if (s < 60) return 'Jetzt'; if (s < 3600) return `${Math.floor(s / 60)}m`; return `${Math.floor(s / 3600)}h`; }
+
+        // =============================================
+        // ULTRASONIC PROXIMITY DETECTION
+        // =============================================
+        const SONIC_FREQ = 19500; // Hz — inaudible to most humans
+        const SONIC_BEACON_INTERVAL = 4000; // ms — emit every 4s
+        const SONIC_LISTEN_INTERVAL = 2000; // ms — analyze every 2s
+        const SONIC_THRESHOLD = 15; // min magnitude to count as detection
+
+        let sonicActive = false;
+        let sonicAudioCtx = null;
+        let sonicOscillator = null;
+        let sonicGainNode = null;
+        let sonicAnalyser = null;
+        let sonicMicStream = null;
+        let sonicMicSource = null;
+        let sonicEmitTimer = null;
+        let sonicListenTimer = null;
+        let sonicPeerFetchTimer = null;
+
+        function updateSonicStatus(text, color) {
+            const el = document.getElementById('sonic-status-text');
+            el.innerText = text; el.style.color = color;
+        }
+
+        async function toggleUltrasonic() {
+            if (sonicActive) {
+                stopUltrasonic();
+                localStorage.setItem('lara_sonic', 'off');
+            } else {
+                await startUltrasonic();
+                if (sonicActive) localStorage.setItem('lara_sonic', 'on');
+            }
+        }
+
+        async function startUltrasonic() {
+            try {
+                // Request microphone
+                sonicMicStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                });
+
+                sonicAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+
+                // --- EMITTER: oscillator at 19500 Hz ---
+                sonicOscillator = sonicAudioCtx.createOscillator();
+                sonicOscillator.type = 'sine';
+                sonicOscillator.frequency.setValueAtTime(SONIC_FREQ, sonicAudioCtx.currentTime);
+                sonicGainNode = sonicAudioCtx.createGain();
+                sonicGainNode.gain.setValueAtTime(0, sonicAudioCtx.currentTime); // start silent
+                sonicOscillator.connect(sonicGainNode);
+                sonicGainNode.connect(sonicAudioCtx.destination);
+                sonicOscillator.start();
+
+                // Beacon: emit short burst every SONIC_BEACON_INTERVAL
+                sonicEmitTimer = setInterval(() => emitSonicPing(), SONIC_BEACON_INTERVAL);
+                emitSonicPing(); // first ping immediately
+
+                // --- LISTENER: mic → analyser ---
+                sonicAnalyser = sonicAudioCtx.createAnalyser();
+                sonicAnalyser.fftSize = 8192; // high resolution for narrow frequency detection
+                sonicMicSource = sonicAudioCtx.createMediaStreamSource(sonicMicStream);
+                sonicMicSource.connect(sonicAnalyser);
+
+                // Listen loop
+                sonicListenTimer = setInterval(() => listenForSonicPings(), SONIC_LISTEN_INTERVAL);
+
+                // Periodically fetch all peer IDs for cross-referencing
+                sonicPeerFetchTimer = setInterval(async () => {
+                    try {
+                        const res = await fetch('/api/peers/all-ids');
+                        allKnownPeerIds = await res.json();
+                    } catch(e) {}
+                }, 5000);
+
+                sonicActive = true;
+                document.getElementById('sonic-toggle-btn').textContent = 'Deaktivieren';
+                document.getElementById('sonic-details').classList.remove('hidden');
+                document.getElementById('sonic-emit-dot').style.background = '#22c55e';
+                document.getElementById('sonic-emit-status').textContent = 'Aktiv';
+                document.getElementById('sonic-listen-dot').style.background = '#22c55e';
+                document.getElementById('sonic-listen-status').textContent = 'Aktiv';
+                updateSonicStatus('Aktiv — sendet & empfängt', '#22c55e');
+
+            } catch (err) {
+                console.error('Ultrasonic start failed:', err);
+                updateSonicStatus('Mikrofon verweigert', '#ef4444');
+                document.getElementById('sonic-details').classList.remove('hidden');
+            }
+        }
+
+        function stopUltrasonic() {
+            if (sonicEmitTimer) clearInterval(sonicEmitTimer);
+            if (sonicListenTimer) clearInterval(sonicListenTimer);
+            if (sonicPeerFetchTimer) clearInterval(sonicPeerFetchTimer);
+            if (sonicOscillator) { try { sonicOscillator.stop(); } catch(e){} }
+            if (sonicMicStream) sonicMicStream.getTracks().forEach(t => t.stop());
+            if (sonicAudioCtx) sonicAudioCtx.close();
+            sonicOscillator = null; sonicGainNode = null; sonicAnalyser = null;
+            sonicMicStream = null; sonicMicSource = null; sonicAudioCtx = null;
+            sonicEmitTimer = null; sonicListenTimer = null;
+            sonicActive = false;
+            document.getElementById('sonic-toggle-btn').textContent = 'Aktivieren';
+            document.getElementById('sonic-emit-dot').style.background = '#d1d5db';
+            document.getElementById('sonic-emit-status').textContent = 'Aus';
+            document.getElementById('sonic-listen-dot').style.background = '#d1d5db';
+            document.getElementById('sonic-listen-status').textContent = 'Aus';
+            updateSonicStatus('Inaktiv', '#9ca3af');
+        }
+
+        function emitSonicPing() {
+            if (!sonicGainNode || !sonicAudioCtx) return;
+            // Short 200ms burst
+            const now = sonicAudioCtx.currentTime;
+            sonicGainNode.gain.setValueAtTime(0.3, now);
+            sonicGainNode.gain.setValueAtTime(0, now + 0.2);
+
+            // Tell server we're emitting
+            fetch('/api/ultrasonic/ping', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ peer_id: myId })
+            }).catch(() => {});
+        }
+
+        function listenForSonicPings() {
+            if (!sonicAnalyser) return;
+            const bufLen = sonicAnalyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufLen);
+            sonicAnalyser.getByteFrequencyData(dataArray);
+
+            // Find the bin closest to SONIC_FREQ
+            const nyquist = sonicAudioCtx.sampleRate / 2;
+            const binWidth = nyquist / bufLen;
+            const targetBin = Math.round(SONIC_FREQ / binWidth);
+
+            // Check a small range around the target frequency
+            let maxMag = 0;
+            for (let i = Math.max(0, targetBin - 2); i <= Math.min(bufLen - 1, targetBin + 2); i++) {
+                if (dataArray[i] > maxMag) maxMag = dataArray[i];
+            }
+
+            // Update mic level bar in settings
+            const pct = Math.min(100, (maxMag / 255) * 100);
+            const bar = document.getElementById('sonic-mic-level');
+            if (bar) bar.style.width = pct + '%';
+
+            if (maxMag >= SONIC_THRESHOLD) {
+                // We heard an ultrasonic ping! Report to server.
+                // Send all known peer IDs — server cross-references who actually pinged recently.
+                const radarPeerIds = Array.from(document.querySelectorAll('[data-peer-id]'))
+                    .map(el => el.dataset.peerId);
+                const allIds = [...new Set([...radarPeerIds, ...allKnownPeerIds])];
+
+                fetch('/api/ultrasonic/heard', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ listener_id: myId, heard_ids: allIds })
+                }).catch(() => {});
+            }
+        }
+
+        async function testMicrophone() {
+            const result = document.getElementById('sonic-mic-result');
+            result.textContent = 'Starte Test...';
+            result.style.color = '#f59e0b';
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+                });
+                const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+                const src = ctx.createMediaStreamSource(stream);
+                const analyser = ctx.createAnalyser();
+                analyser.fftSize = 8192;
+                src.connect(analyser);
+
+                // Also emit a test tone through speaker
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(SONIC_FREQ, ctx.currentTime);
+                const gain = ctx.createGain();
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+
+                // Wait 500ms then measure
+                await new Promise(r => setTimeout(r, 500));
+
+                const bufLen = analyser.frequencyBinCount;
+                const data = new Uint8Array(bufLen);
+                analyser.getByteFrequencyData(data);
+
+                const nyquist = ctx.sampleRate / 2;
+                const binWidth = nyquist / bufLen;
+                const targetBin = Math.round(SONIC_FREQ / binWidth);
+
+                let maxMag = 0;
+                for (let i = Math.max(0, targetBin - 3); i <= Math.min(bufLen - 1, targetBin + 3); i++) {
+                    if (data[i] > maxMag) maxMag = data[i];
+                }
+
+                osc.stop();
+                stream.getTracks().forEach(t => t.stop());
+                ctx.close();
+
+                const bar = document.getElementById('sonic-mic-level');
+                const pct = Math.min(100, (maxMag / 255) * 100);
+                if (bar) bar.style.width = pct + '%';
+
+                if (maxMag >= SONIC_THRESHOLD) {
+                    result.textContent = `Erkannt! Stärke: ${maxMag}/255 — Dein Gerät unterstützt Ultraschall-Erkennung.`;
+                    result.style.color = '#22c55e';
+                } else {
+                    result.textContent = `Schwach: ${maxMag}/255 — Dein Mikrofon erkennt 19.5 kHz möglicherweise nicht zuverlässig.`;
+                    result.style.color = '#ef4444';
+                }
+            } catch (err) {
+                result.textContent = 'Mikrofon-Zugriff verweigert.';
+                result.style.color = '#ef4444';
+            }
+        }
+
+        // PWA Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(reg => {
+                console.log('SW registered:', reg.scope);
+            }).catch(err => console.warn('SW registration failed:', err));
+        }
     </script>
 </body>
 
