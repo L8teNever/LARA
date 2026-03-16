@@ -97,6 +97,13 @@ ultrasonic_pings: dict = {}  # { peer_id: float(timestamp) }
 # Confirmed ultrasonic pairs: frozenset({id_a, id_b}) -> expiry timestamp
 ultrasonic_pairs: dict = {}  # { frozenset: float(expiry) }
 
+# Manual pairing codes: code -> { "peer_id": str, "expires": float }
+manual_pairing_codes: dict = {}
+# Manual pairs: frozenset({id_a, id_b}) -> expiry timestamp
+manual_pairs: dict = {}
+
+import random
+
 def is_nearby_geo(lat1, lon1, src1, lat2, lon2, src2) -> bool:
     """Check if two coordinates are nearby, with dynamic radius based on source accuracy.
     GPS+GPS: 500m (0.005°), GPS+IP: 10km (0.1°), IP+IP: 20km (0.2°)"""
@@ -295,6 +302,65 @@ async def ultrasonic_heard(request: Request, data: dict):
 
     return {"status": "ok", "confirmed": confirmed}
 
+@app.post("/api/pairing/generate")
+async def pairing_generate(data: dict):
+    """Generate a 6-digit pairing code for this peer. Valid for 2 minutes."""
+    peer_id = data.get("peer_id")
+    if not peer_id:
+        raise HTTPException(status_code=400, detail="peer_id required")
+
+    # Clean expired codes
+    now = time.time()
+    expired = [c for c, v in manual_pairing_codes.items() if v["expires"] < now]
+    for c in expired:
+        del manual_pairing_codes[c]
+
+    # Remove any existing code for this peer
+    old = [c for c, v in manual_pairing_codes.items() if v["peer_id"] == peer_id]
+    for c in old:
+        del manual_pairing_codes[c]
+
+    # Generate unique 6-digit code
+    for _ in range(100):
+        code = f"{random.randint(0, 999999):06d}"
+        if code not in manual_pairing_codes:
+            break
+
+    manual_pairing_codes[code] = {"peer_id": peer_id, "expires": now + 120}
+    return {"code": code}
+
+
+@app.post("/api/pairing/join")
+async def pairing_join(data: dict):
+    """Enter a pairing code to connect with another device for 5 minutes."""
+    peer_id = data.get("peer_id")
+    code = data.get("code", "").strip()
+    if not peer_id or not code:
+        raise HTTPException(status_code=400, detail="peer_id and code required")
+
+    now = time.time()
+    entry = manual_pairing_codes.get(code)
+    if not entry or entry["expires"] < now:
+        raise HTTPException(status_code=404, detail="Code ungültig oder abgelaufen")
+
+    other_id = entry["peer_id"]
+    if other_id == peer_id:
+        raise HTTPException(status_code=400, detail="Du kannst dich nicht mit dir selbst verbinden")
+
+    # Create pair for 5 minutes
+    pair_key = frozenset({peer_id, other_id})
+    manual_pairs[pair_key] = now + 300
+
+    # Remove used code
+    del manual_pairing_codes[code]
+
+    # Get the other peer's name
+    other_peer = next((p for p in active_peers if p.id == other_id), None)
+    other_name = other_peer.name if other_peer else "Unbekannt"
+
+    return {"status": "ok", "paired_with": other_id, "paired_name": other_name}
+
+
 @app.get("/api/peers/discover")
 async def discover_peers(request: Request, lat: Optional[float] = None, lon: Optional[float] = None, coord_source: Optional[str] = None, peer_id: Optional[str] = None):
     client_ip = get_client_ip(request)
@@ -313,6 +379,11 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
     expired_pairs = [k for k, v in ultrasonic_pairs.items() if v < now]
     for k in expired_pairs:
         del ultrasonic_pairs[k]
+
+    # Cleanup expired manual pairs
+    expired_manual = [k for k, v in manual_pairs.items() if v < now]
+    for k in expired_manual:
+        del manual_pairs[k]
 
     # Cleanup old peers (not seen for 30s)
     to_remove = [p for p in active_peers if now - p.last_seen > 30]
@@ -337,10 +408,18 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
             if pair_key in ultrasonic_pairs and ultrasonic_pairs[pair_key] > now:
                 sources.append("Ultrasonic")
 
+        # 4. Manual pairing — confirmed pair within 5min window
+        if peer_id:
+            pair_key = frozenset({peer_id, p.id})
+            if pair_key in manual_pairs and manual_pairs[pair_key] > now:
+                sources.append("Manual")
+
         if sources:
             p_copy = p.copy()
-            # Priority: Ultrasonic > Network > Location
-            if "Ultrasonic" in sources:
+            # Priority: Manual > Ultrasonic > Network > Location
+            if "Manual" in sources:
+                p_copy.source = "Manual"
+            elif "Ultrasonic" in sources:
                 p_copy.source = "Ultrasonic"
             elif "Network" in sources:
                 p_copy.source = "Network"

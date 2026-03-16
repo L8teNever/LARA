@@ -491,6 +491,52 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Manual Pairing -->
+                    <div class="m3-card p-4 sm:p-6 border border-white">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 sm:gap-4">
+                                <div class="p-2 bg-green-50 text-green-600 rounded-xl"><i data-lucide="link"
+                                        class="w-5 h-5 sm:w-6 sm:h-6"></i></div>
+                                <div>
+                                    <p class="font-bold text-sm sm:text-base">Manuelles Pairing</p>
+                                    <p class="text-xs text-gray-400">Geräte per 6-stelligem Code verbinden</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-4 space-y-3">
+                            <!-- Generate Code -->
+                            <div class="bg-white/60 rounded-2xl p-3 sm:p-4">
+                                <p class="text-xs text-gray-500 mb-2">Dein Gerät empfängt — Code generieren:</p>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="generatePairingCode()"
+                                        class="px-4 py-2 bg-green-600 text-white rounded-xl font-bold text-xs active:scale-95 transition-transform">
+                                        Code generieren
+                                    </button>
+                                    <div id="pairing-code-display" class="hidden flex items-center gap-2">
+                                        <span id="pairing-code-value"
+                                            class="font-mono text-2xl font-bold tracking-[0.3em] text-green-700 bg-green-50 px-4 py-2 rounded-xl border-2 border-green-200 select-all"></span>
+                                        <span id="pairing-code-timer" class="text-[10px] text-gray-400"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Enter Code -->
+                            <div class="bg-white/60 rounded-2xl p-3 sm:p-4">
+                                <p class="text-xs text-gray-500 mb-2">Code vom anderen Gerät eingeben:</p>
+                                <div class="flex items-center gap-2">
+                                    <input type="text" id="pairing-code-input" maxlength="6" inputmode="numeric" pattern="[0-9]*"
+                                        class="font-mono text-lg font-bold tracking-[0.3em] text-center w-40 px-3 py-2 border-2 border-gray-200 rounded-xl focus:border-green-400 focus:outline-none transition-colors"
+                                        placeholder="000000"
+                                        oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                                    <button onclick="joinWithPairingCode()"
+                                        class="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs active:scale-95 transition-transform">
+                                        Verbinden
+                                    </button>
+                                </div>
+                                <p id="pairing-join-status" class="text-[10px] mt-2 hidden"></p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -752,11 +798,12 @@
                 node.style.setProperty('--tx', x + 'px');
                 node.style.setProperty('--ty', y + 'px');
                 node.onclick = () => startDrop(p);
-                const color = p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
+                const color = p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
+                const icon = p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
                 node.innerHTML = `
                     <div class="relative w-11 h-11 sm:w-14 sm:h-14 ${color} rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform">
                         <i data-lucide="smartphone" class="w-5 h-5 sm:w-6 sm:h-6"></i>
-                        <div class="connection-badge ${color} p-0.5 sm:p-1 rounded-full border-2 border-white"><i data-lucide="${p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin'}" class="w-2 h-2 sm:w-2.5 sm:h-2.5"></i></div>
+                        <div class="connection-badge ${color} p-0.5 sm:p-1 rounded-full border-2 border-white"><i data-lucide="${icon}" class="w-2 h-2 sm:w-2.5 sm:h-2.5"></i></div>
                     </div>
                     <div class="mt-1.5 sm:mt-2 bg-white/90 backdrop-blur px-1.5 sm:px-2 py-0.5 rounded-full shadow-sm border text-center">
                         <span class="text-[8px] sm:text-[9px] font-bold text-gray-800 truncate block max-w-[56px] sm:max-w-[72px]">${p.name}</span>
@@ -1006,6 +1053,85 @@
         function showMessage(h) { document.getElementById('modal-content').innerHTML = h; document.getElementById('modal-backdrop').classList.remove('hidden'); }
         function closeModal() { document.getElementById('modal-backdrop').classList.add('hidden'); }
         function timeAgo(t) { const s = Math.floor((Date.now() / 1000) - t); if (s < 60) return 'Jetzt'; if (s < 3600) return `${Math.floor(s / 60)}m`; return `${Math.floor(s / 3600)}h`; }
+
+        // =============================================
+        // MANUAL PAIRING
+        // =============================================
+        let pairingCodeTimer = null;
+
+        async function generatePairingCode() {
+            try {
+                const res = await fetch('/api/pairing/generate', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ peer_id: myId })
+                });
+                const data = await res.json();
+                const display = document.getElementById('pairing-code-display');
+                const valueEl = document.getElementById('pairing-code-value');
+                const timerEl = document.getElementById('pairing-code-timer');
+
+                valueEl.textContent = data.code;
+                display.classList.remove('hidden');
+
+                // Countdown timer (2 min = 120s)
+                let remaining = 120;
+                if (pairingCodeTimer) clearInterval(pairingCodeTimer);
+                timerEl.textContent = `2:00`;
+
+                pairingCodeTimer = setInterval(() => {
+                    remaining--;
+                    if (remaining <= 0) {
+                        clearInterval(pairingCodeTimer);
+                        display.classList.add('hidden');
+                        return;
+                    }
+                    timerEl.textContent = `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, '0')}`;
+                }, 1000);
+            } catch (e) {
+                showMessage('Fehler beim Generieren des Codes.');
+            }
+        }
+
+        async function joinWithPairingCode() {
+            const input = document.getElementById('pairing-code-input');
+            const code = input.value.trim();
+            const statusEl = document.getElementById('pairing-join-status');
+
+            if (code.length !== 6) {
+                statusEl.textContent = 'Bitte gib einen 6-stelligen Code ein.';
+                statusEl.style.color = '#ef4444';
+                statusEl.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/pairing/join', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ peer_id: myId, code: code })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    statusEl.textContent = err.detail || 'Verbindung fehlgeschlagen.';
+                    statusEl.style.color = '#ef4444';
+                    statusEl.classList.remove('hidden');
+                    return;
+                }
+
+                const data = await res.json();
+                statusEl.textContent = `Verbunden mit ${data.paired_name} für 5 Minuten!`;
+                statusEl.style.color = '#16a34a';
+                statusEl.classList.remove('hidden');
+                input.value = '';
+
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                fetchPeers();
+            } catch (e) {
+                statusEl.textContent = 'Netzwerkfehler. Versuche es erneut.';
+                statusEl.style.color = '#ef4444';
+                statusEl.classList.remove('hidden');
+            }
+        }
 
         // =============================================
         // ULTRASONIC PROXIMITY DETECTION
