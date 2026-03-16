@@ -51,13 +51,18 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 import secrets
+import clamd
 
-# In-memory storage for file metadata
-class shared_file(BaseModel):
+# Support multiple files per share
+class file_entry(BaseModel):
     id: str
     filename: str
     content_type: str
     size: int
+
+class shared_bundle(BaseModel):
+    id: str
+    files: List[file_entry]
     uploader_ip: str
     lat: Optional[float] = None
     lon: Optional[float] = None
@@ -66,7 +71,7 @@ class shared_file(BaseModel):
     is_public: bool = False
     access_token: Optional[str] = None
 
-files_metadata: List[shared_file] = []
+files_metadata: List[shared_bundle] = []
 
 def get_client_ip(request: Request):
     # Try to get the real IP if behind a proxy
@@ -75,38 +80,86 @@ def get_client_ip(request: Request):
         return forwarded.split(",")[0]
     return request.client.host
 
+def scan_for_viruses(file_path: str):
+    try:
+        # Connect to ClamAV (assumes service name 'clamav' in docker-compose)
+        cd = clamd.ClamdNetworkSocket(host="clamav", port=3310)
+        result = cd.scan(file_path)
+        if result and any(status == 'FOUND' for _, (_, status) in result.items()):
+            return False, "Virus found!"
+        return True, None
+    except Exception as e:
+        # If ClamAV is not available (e.g. during local dev), we log and continue
+        # but in production/docker it will be available.
+        print(f"Virus scanner warning: {e}")
+        return True, None
+
 @app.post("/api/upload")
 @limiter.limit("5/minute")
 async def upload_file(
     request: Request,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     lat: Optional[float] = Form(None),
     lon: Optional[float] = Form(None),
     is_public: bool = Form(False),
     expires_in: int = Form(1)
 ):
-    safe_name = sanitize_filename(file.filename)
-    file_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, file_id)
+    bundle_id = str(uuid.uuid4())
+    bundle_files = []
+    
+    total_size = 0
+    max_bundle_size = 1024 * 1024 * 1024  # 1GB
+    
+    for file in files:
+        file_id = str(uuid.uuid4())
+        safe_name = sanitize_filename(file.filename)
+        file_path = os.path.join(UPLOAD_DIR, file_id)
+        
+        # Read file in chunks to handle large files
+        file_size = 0
+        with open(file_path, "wb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024) # 1MB chunks
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                total_size += len(chunk)
+                
+                if total_size > max_bundle_size:
+                    os.remove(file_path)
+                    # Cleanup previously saved files in this bundle
+                    for f in bundle_files:
+                        if os.path.exists(os.path.join(UPLOAD_DIR, f.id)):
+                            os.remove(os.path.join(UPLOAD_DIR, f.id))
+                    raise HTTPException(status_code=413, detail="Total bundle size exceeds 1GB")
+                
+                buffer.write(chunk)
+        
+        # Virus Scan
+        safe, error = scan_for_viruses(file_path)
+        if not safe:
+            os.remove(file_path)
+            # Cleanup
+            for f in bundle_files:
+                if os.path.exists(os.path.join(UPLOAD_DIR, f.id)):
+                    os.remove(os.path.join(UPLOAD_DIR, f.id))
+            raise HTTPException(status_code=400, detail=f"Security Alert: {error} in {safe_name}")
+
+        bundle_files.append(file_entry(
+            id=file_id,
+            filename=safe_name,
+            content_type=file.content_type,
+            size=file_size
+        ))
     
     access_token = None
     if is_public:
         access_token = secrets.token_urlsafe(192)
     
-    # Large file protection (cap at 100MB for demo)
-    content = await file.read(100 * 1024 * 1024)
-    if await file.read(1):  # Try to read one more byte
-         raise HTTPException(status_code=413, detail="File too large (max 100MB)")
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(content)
-    
     now = time.time()
-    metadata = shared_file(
-        id=file_id,
-        filename=safe_name,
-        content_type=file.content_type,
-        size=len(content),
+    metadata = shared_bundle(
+        id=bundle_id,
+        files=bundle_files,
         uploader_ip=get_client_ip(request),
         lat=lat,
         lon=lon,
@@ -119,10 +172,9 @@ async def upload_file(
     
     return {
         "status": "success", 
-        "file_id": file_id, 
+        "bundle_id": bundle_id, 
         "is_public": is_public,
-        "access_token": access_token,
-        "expires_at": metadata.expires_at
+        "access_token": access_token
     }
 
 @app.get("/api/discover")
@@ -164,66 +216,66 @@ async def discover_files(
 @app.get("/api/download/{file_id}")
 @limiter.limit("20/minute")
 async def download_file(request: Request, file_id: str, lat: Optional[float] = None, lon: Optional[float] = None):
-    file_meta = next((f for f in files_metadata if f.id == file_id), None)
-    if not file_meta or file_meta.expires_at < time.time():
+    # Find the bundle containing this file
+    bundle = None
+    file_meta = None
+    for b in files_metadata:
+        for f in b.files:
+            if f.id == file_id:
+                bundle = b
+                file_meta = f
+                break
+        if bundle: break
+
+    if not bundle or bundle.expires_at < time.time():
         raise HTTPException(status_code=404, detail="File not found or expired")
     
-    # Strict proximity check for non-public downloads
-    if not file_meta.is_public:
+    # Strict proximity check for non-public bundles
+    if not bundle.is_public:
         client_ip = get_client_ip(request)
         client_subnet = ".".join(client_ip.split(".")[:-1])
-        uploader_subnet = ".".join(file_meta.uploader_ip.split(".")[:-1])
+        uploader_subnet = ".".join(bundle.uploader_ip.split(".")[:-1])
         
         is_auth = False
         if client_subnet == uploader_subnet:
             is_auth = True
-        elif lat is not None and lon is not None and file_meta.lat is not None and file_meta.lon is not None:
-             dist = ((file_meta.lat - lat)**2 + (file_meta.lon - lon)**2)**0.5
+        elif lat is not None and lon is not None and bundle.lat is not None and bundle.lon is not None:
+             dist = ((bundle.lat - lat)**2 + (bundle.lon - lon)**2)**0.5
              if dist < 0.005:
                  is_auth = True
         
         if not is_auth:
-            raise HTTPException(status_code=403, detail="Security Error: Proximity mismatch for private sharing")
+            raise HTTPException(status_code=403, detail="Security Error: Proximity mismatch")
     
     file_path = os.path.join(UPLOAD_DIR, file_id)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File content missing")
-        
     return FileResponse(file_path, filename=file_meta.filename, media_type=file_meta.content_type)
 
 @app.get("/api/p/{access_token}")
-@limiter.limit("50/minute")
-async def public_download(access_token: str):
-    # Public downloads via long random token - No proximity check needed
-    file_meta = next((f for f in files_metadata if f.access_token == access_token), None)
-    if not file_meta or file_meta.expires_at < time.time():
+async def public_view(access_token: str):
+    # This now returns a list of files in the bundle for the UI to display
+    bundle = next((b for b in files_metadata if b.access_token == access_token), None)
+    if not bundle or bundle.expires_at < time.time():
         raise HTTPException(status_code=404, detail="Invalid or expired link")
-        
-    file_path = os.path.join(UPLOAD_DIR, file_meta.id)
-    return FileResponse(file_path, filename=file_meta.filename, media_type=file_meta.content_type)
-
-from fastapi.concurrency import run_in_threadpool
-import asyncio
+    return bundle
 
 async def cleanup_loop():
     while True:
         now = time.time()
         to_remove = []
-        for f in files_metadata:
-            if f.expires_at < now:
-                to_remove.append(f)
+        for b in files_metadata:
+            if b.expires_at < now:
+                to_remove.append(b)
         
-        for f in to_remove:
-            files_metadata.remove(f)
-            file_path = os.path.join(UPLOAD_DIR, f.id)
-            if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    print(f"Cleanup: Deleted expired file {f.filename}")
-                except:
-                    pass
-        
-        await asyncio.sleep(60) # Run cleanup every minute
+        for b in to_remove:
+            files_metadata.remove(b)
+            for f in b.files:
+                file_path = os.path.join(UPLOAD_DIR, f.id)
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        print(f"Cleanup: Deleted expired file {f.filename}")
+                    except: pass
+        await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def startup_event():

@@ -8,3 +8,9 @@ services:
     volumes:
       - ./uploads:/app/uploads
     restart: always
+    depends_on:
+      - clamav
+
+  clamav:
+    image: clamav/clamav:latest
+    restart: always

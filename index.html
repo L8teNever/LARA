@@ -100,6 +100,69 @@
             });
         }
 
+        // Check for public token in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const publicToken = urlParams.get('token');
+        if (publicToken) {
+            handlePublicLink(publicToken);
+        }
+
+        async function handlePublicLink(token) {
+            try {
+                const res = await fetch(`/api/p/${token}`);
+                if (!res.ok) throw new Error("Link expired or invalid");
+                const bundle = await res.json();
+
+                // Show only this bundle in the list
+                nearbyList.innerHTML = '<h3 style="font-size: 16px; margin-bottom: 12px;">Public Shared Files:</h3>';
+                renderBundle(bundle);
+                // Stop regular discovery polling
+                window.isPublicMode = true;
+            } catch (err) {
+                showStatus(err.message);
+            }
+        }
+
+        function renderBundle(bundle, isExpanded = true) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.style.backgroundColor = 'var(--md-sys-color-surface)';
+            div.style.color = 'var(--md-sys-color-on-surface)';
+            div.style.padding = '16px';
+            div.style.marginBottom = '8px';
+
+            const totalSize = (bundle.files.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(1) + ' MB';
+            const fileCount = bundle.files.length;
+            const display = isExpanded ? 'flex' : 'none';
+            const icon = isExpanded ? '➖' : '➕';
+
+            div.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleBundle('${bundle.id}')">
+                    <div class="file-info">
+                        <span class="file-name" style="font-weight: 600;">📦 Share from ${bundle.uploader_ip}</span>
+                        <span class="file-meta">${fileCount} file(s) • ${totalSize}</span>
+                    </div>
+                    <div style="font-size: 20px;" id="icon-${bundle.id}">${icon}</div>
+                </div>
+                <div id="bundle-${bundle.id}" style="display: ${display}; margin-top: 16px; border-top: 1px solid var(--md-sys-color-outline); padding-top: 12px; flex-direction: column; gap: 8px;">
+                    ${bundle.files.map(f => {
+                let downloadUrl = `/api/download/${f.id}`;
+                if (userCoords.lat) downloadUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                return `
+                            <div class="file-item" style="border: none; background: rgba(0,0,0,0.03); padding: 10px 16px;">
+                                <div class="file-info">
+                                    <span class="file-name" style="font-size: 14px;">${f.filename}</span>
+                                    <span class="file-meta">${(f.size / 1024).toFixed(1)} KB</span>
+                                </div>
+                                <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="window.open('${downloadUrl}')">Download</button>
+                            </div>
+                        `;
+            }).join('')}
+                </div>
+            `;
+            nearbyList.appendChild(div);
+        }
+
         function showStatus(msg) {
             statusEl.innerText = msg;
             statusEl.style.display = 'block';
@@ -134,16 +197,20 @@
             qrContainer.style.display = 'none';
             qrcodeEl.innerHTML = '';
 
+            // Group all selected files into one formData
+            const formData = new FormData();
             for (const file of files) {
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('is_public', isPublic);
-                formData.append('expires_in', expiresIn);
+                formData.append('files', file);
+            }
+            formData.append('is_public', isPublic);
+            formData.append('expires_in', expiresIn);
 
-                if (userCoords.lat) {
-                    formData.append('lat', userCoords.lat);
-                    formData.append('lon', userCoords.lon);
-                }
+            if (userCoords.lat) {
+                formData.append('lat', userCoords.lat);
+                formData.append('lon', userCoords.lon);
+            }
+
+            for (const file of [files[0]]) { // Loop once for the whole bundle
 
                 showStatus(`Sending ${file.name}...`);
 
@@ -155,10 +222,10 @@
                     const data = await res.json();
 
                     if (res.ok) {
-                        showStatus(`Shared ${file.name} successfully!`);
+                        showStatus(`Shared ${files.length} file(s) successfully!`);
 
                         if (data.is_public && data.access_token) {
-                            const fullUrl = `${window.location.origin}/api/p/${data.access_token}`;
+                            const fullUrl = `${window.location.origin}/?token=${data.access_token}`;
                             shareUrlInput.value = fullUrl;
                             new QRCode(qrcodeEl, {
                                 text: fullUrl,
@@ -170,10 +237,13 @@
                             });
                             qrContainer.style.display = 'flex';
                         }
+                    } else {
+                        showStatus(`Error: ${data.detail || "Upload failed"}`);
                     }
                 } catch (err) {
                     showStatus("Upload failed!");
                 }
+                break; // Standard multipart upload sends all files at once now
             }
         }
 
@@ -187,6 +257,7 @@
 
         // Discovery Logic
         async function fetchNearby() {
+            if (window.isPublicMode) return;
             let url = '/api/discover';
             if (userCoords.lat) {
                 url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
@@ -197,32 +268,28 @@
                 const files = await res.json();
 
                 if (files.length === 0) {
-                    nearbyList.innerHTML = '<p style="opacity: 0.7; text-align: center; padding: 20px;">No files found nearby right now.</p>';
+                    nearbyList.innerHTML = '<p style="opacity: 0.7; text-align: center; padding: 20px;">No shares found nearby right now.</p>';
                     return;
                 }
 
                 nearbyList.innerHTML = '';
-                files.forEach(f => {
-                    const div = document.createElement('div');
-                    div.className = 'file-item';
-                    const size = (f.size / 1024).toFixed(1) + ' KB';
-
-                    let downloadUrl = `/api/download/${f.id}`;
-                    if (userCoords.lat) {
-                        downloadUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-                    }
-
-                    div.innerHTML = `
-                        <div class="file-info">
-                            <span class="file-name">${f.filename}</span>
-                            <span class="file-meta">${size} • from ${f.uploader_ip}</span>
-                        </div>
-                        <button class="btn" onclick="window.open('${downloadUrl}')">Receive</button>
-                    `;
-                    nearbyList.appendChild(div);
+                files.forEach(bundle => {
+                    renderBundle(bundle, false); // Render as collapsed
                 });
             } catch (err) {
                 console.error("Discovery error", err);
+            }
+        }
+
+        function toggleBundle(id) {
+            const el = document.getElementById(`bundle-${id}`);
+            const icon = document.getElementById(`icon-${id}`);
+            if (el.style.display === 'none') {
+                el.style.display = 'flex';
+                icon.innerText = '➖';
+            } else {
+                el.style.display = 'none';
+                icon.innerText = '➕';
             }
         }
 
