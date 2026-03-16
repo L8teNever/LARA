@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LARA Drop - Peer Sharing</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        .peer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
+        }
+
+        .peer-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 20px;
+            background: var(--md-sys-color-surface-variant);
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            text-align: center;
+        }
+
+        .peer-item:hover {
+            transform: scale(1.05);
+            background: var(--md-sys-color-primary-container);
+        }
+
+        .peer-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--md-sys-color-primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .peer-name {
+            font-size: 14px;
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        .name-setup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--md-sys-color-surface);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        #incoming-drop {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 2500;
+            width: 300px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="name-modal" class="name-setup" style="display: none;">
+        <h1 style="margin-bottom: 8px;">Welcome to LARA Drop</h1>
+        <p style="opacity: 0.7; margin-bottom: 24px;">Enter your name to be discoverable</p>
+        <input type="text" id="user-name-input" placeholder="Your Name" class="card"
+            style="width: 100%; max-width: 300px; padding: 16px; border: 2px solid var(--md-sys-color-primary); outline: none; font-size: 18px;">
+        <button class="btn" onclick="saveName()" style="margin-top: 24px; width: 100%; max-width: 300px;">Start
+            Dropping</button>
+    </div>
+
+    <header class="header">
+        <div class="logo">LARA <span>Drop</span></div>
+        <div id="my-name-display" style="font-size: 14px; opacity: 0.8;"></div>
+    </header>
+
+    <main class="main-container">
+        <section class="card">
+            <h2 class="section-title">Drop to Someone</h2>
+            <p style="font-size: 14px; opacity: 0.7; margin-bottom: 20px;">Select people nearby to send files directly
+            </p>
+
+            <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()">
+                <div class="drop-zone-icon">📥</div>
+                <p>Select files to share</p>
+                <input type="file" id="file-input" hidden multiple>
+            </div>
+
+            <div id="peer-list" class="peer-grid">
+                <!-- Peers appear here -->
+            </div>
+            <p id="no-peers" style="text-align: center; padding: 40px; opacity: 0.5;">No one nearby yet...</p>
+        </section>
+
+        <div id="incoming-container"></div>
+    </main>
+
+    <script>
+        let myId = localStorage.getItem('lara_peer_id') || Math.random().toString(36).substring(2, 15);
+        let myName = localStorage.getItem('lara_peer_name');
+        let userCoords = { lat: null, lon: null };
+
+        localStorage.setItem('lara_peer_id', myId);
+
+        if (!myName) {
+            document.getElementById('name-modal').style.display = 'flex';
+        } else {
+            initApp();
+        }
+
+        function saveName() {
+            const val = document.getElementById('user-name-input').value.trim();
+            if (val) {
+                localStorage.setItem('lara_peer_name', val);
+                myName = val;
+                document.getElementById('name-modal').style.display = 'none';
+                initApp();
+            }
+        }
+
+        function initApp() {
+            document.getElementById('my-name-display').innerText = `Active as: ${myName}`;
+            navigator.geolocation.getCurrentPosition(pos => {
+                userCoords.lat = pos.coords.latitude;
+                userCoords.lon = pos.coords.longitude;
+            }, err => console.log("Geo blocked"));
+
+            // Heartbeat
+            setInterval(registerMe, 5000);
+            registerMe();
+
+            // Discovery
+            setInterval(fetchPeers, 3000);
+            fetchPeers();
+
+            setInterval(checkIncoming, 4000);
+        }
+
+        async function registerMe() {
+            await fetch('/api/peers/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: myId,
+                    name: myName,
+                    ip: '0.0.0.0', // Set by server
+                    lat: userCoords.lat,
+                    lon: userCoords.lon,
+                    last_seen: 0
+                })
+            });
+        }
+
+        async function fetchPeers() {
+            let url = '/api/peers/discover';
+            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+
+            const res = await fetch(url);
+            const peers = await res.json();
+            const list = document.getElementById('peer-list');
+            const noPeers = document.getElementById('no-peers');
+
+            // Filter out self
+            const others = peers.filter(p => p.id !== myId);
+
+            list.innerHTML = '';
+            if (others.length === 0) {
+                noPeers.style.display = 'block';
+            } else {
+                noPeers.style.display = 'none';
+                others.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'peer-item';
+                    item.onclick = () => startDrop(p);
+                    item.innerHTML = `
+                        <div class="peer-avatar">${p.name[0].toUpperCase()}</div>
+                        <div class="peer-name">${p.name}</div>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+        }
+
+        async function startDrop(target) {
+            const fileInput = document.getElementById('file-input');
+            const files = fileInput.files;
+            if (files.length === 0) {
+                alert("Please select files first!");
+                return;
+            }
+
+            const formData = new FormData();
+            for (const f of files) formData.append('files', f);
+            formData.append('target_peer_id', target.id);
+            formData.append('uploader_name', myName);
+            if (userCoords.lat) {
+                formData.append('lat', userCoords.lat);
+                formData.append('lon', userCoords.lon);
+            }
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                if (res.ok) alert(`Files dropped to ${target.name}!`);
+                else alert("Drop failed!");
+                fileInput.value = '';
+            } catch (e) { alert("Error sending files"); }
+        }
+
+        async function checkIncoming() {
+            let url = '/api/discover';
+            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            const res = await fetch(url);
+            const shares = await res.json();
+
+            const incoming = shares.filter(s => s.target_peer_id === myId);
+            const container = document.getElementById('incoming-container');
+
+            incoming.forEach(s => {
+                if (document.getElementById(`drop-${s.id}`)) return;
+
+                const div = document.createElement('div');
+                div.id = `drop-${s.id}`;
+                div.className = 'card';
+                div.style.marginBottom = '12px';
+                div.style.border = '2px solid var(--md-sys-color-primary)';
+
+                div.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 8px;">Incoming Drop from ${s.uploader_name || 'Someone'}</div>
+                    <div style="font-size: 14px; opacity: 0.8; margin-bottom: 12px;">${s.files.length} file(s) shared</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn" style="padding: 8px 16px; font-size: 14px;" onclick="window.open('/?token=${s.access_token || s.id}')">View & Download</button>
+                    </div>
+                `;
+                container.prepend(div);
+            });
+        }
+    </script>
+</body>
+
+</html>

@@ -65,6 +65,8 @@ class shared_bundle(BaseModel):
     id: str
     files: List[file_entry]
     uploader_ip: str
+    uploader_name: Optional[str] = None # Added for Drop
+    target_peer_id: Optional[str] = None # Added for Drop
     lat: Optional[float] = None
     lon: Optional[float] = None
     timestamp: float
@@ -72,7 +74,16 @@ class shared_bundle(BaseModel):
     is_public: bool = False
     access_token: Optional[str] = None
 
+class Peer(BaseModel):
+    id: str
+    name: str
+    ip: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    last_seen: float
+
 files_metadata: List[shared_bundle] = []
+active_peers: List[Peer] = []
 
 def get_client_ip(request: Request):
     # Try to get the real IP if behind a proxy
@@ -103,7 +114,9 @@ async def upload_file(
     lat: Optional[float] = Form(None),
     lon: Optional[float] = Form(None),
     is_public: bool = Form(False),
-    expires_in: int = Form(1)
+    expires_in: int = Form(1),
+    uploader_name: Optional[str] = Form(None),
+    target_peer_id: Optional[str] = Form(None)
 ):
     bundle_id = str(uuid.uuid4())
     bundle_files = []
@@ -116,42 +129,30 @@ async def upload_file(
         safe_name = sanitize_filename(file.filename)
         file_path = os.path.join(UPLOAD_DIR, file_id)
         
-        # Read file in chunks to handle large files
         file_size = 0
         with open(file_path, "wb") as buffer:
             while True:
-                chunk = await file.read(1024 * 1024) # 1MB chunks
-                if not chunk:
-                    break
+                chunk = await file.read(1024 * 1024)
+                if not chunk: break
                 file_size += len(chunk)
                 total_size += len(chunk)
-                
                 if total_size > max_bundle_size:
                     os.remove(file_path)
-                    # Cleanup previously saved files in this bundle
                     for f in bundle_files:
                         if os.path.exists(os.path.join(UPLOAD_DIR, f.id)):
                             os.remove(os.path.join(UPLOAD_DIR, f.id))
                     raise HTTPException(status_code=413, detail="Total bundle size exceeds 1GB")
-                
                 buffer.write(chunk)
         
-        # Virus Scan
         safe, error = scan_for_viruses(file_path)
         if not safe:
             os.remove(file_path)
-            # Cleanup
             for f in bundle_files:
                 if os.path.exists(os.path.join(UPLOAD_DIR, f.id)):
                     os.remove(os.path.join(UPLOAD_DIR, f.id))
             raise HTTPException(status_code=400, detail=f"Security Alert: {error} in {safe_name}")
 
-        bundle_files.append(file_entry(
-            id=file_id,
-            filename=safe_name,
-            content_type=file.content_type,
-            size=file_size
-        ))
+        bundle_files.append(file_entry(id=file_id, filename=safe_name, content_type=file.content_type, size=file_size))
     
     access_token = None
     if is_public:
@@ -162,6 +163,8 @@ async def upload_file(
         id=bundle_id,
         files=bundle_files,
         uploader_ip=get_client_ip(request),
+        uploader_name=uploader_name,
+        target_peer_id=target_peer_id,
         lat=lat,
         lon=lon,
         timestamp=now,
@@ -171,12 +174,41 @@ async def upload_file(
     )
     files_metadata.append(metadata)
     
-    return {
-        "status": "success", 
-        "bundle_id": bundle_id, 
-        "is_public": is_public,
-        "access_token": access_token
-    }
+    return {"status": "success", "bundle_id": bundle_id, "is_public": is_public, "access_token": access_token}
+
+@app.post("/api/peers/register")
+async def register_peer(request: Request, peer: Peer):
+    # Update or add peer
+    existing = next((p for p in active_peers if p.id == peer.id), None)
+    if existing:
+        active_peers.remove(existing)
+    
+    peer.ip = get_client_ip(request)
+    peer.last_seen = time.time()
+    active_peers.append(peer)
+    return {"status": "ok"}
+
+@app.get("/api/peers/discover")
+async def discover_peers(request: Request, lat: Optional[float] = None, lon: Optional[float] = None):
+    client_ip = get_client_ip(request)
+    client_subnet = ".".join(client_ip.split(".")[:-1])
+    now = time.time()
+    
+    # Cleanup old peers (not seen for 30s)
+    to_remove = [p for p in active_peers if now - p.last_seen > 30]
+    for p in to_remove: active_peers.remove(p)
+    
+    nearby_peers = []
+    for p in active_peers:
+        peer_subnet = ".".join(p.ip.split(".")[:-1])
+        is_nearby = False
+        if peer_subnet == client_subnet: is_nearby = True
+        elif lat is not None and lon is not None and p.lat is not None and p.lon is not None:
+            dist = ((p.lat - lat)**2 + (p.lon - lon)**2)**0.5
+            if dist < 0.005: is_nearby = True
+        
+        if is_nearby: nearby_peers.append(p)
+    return nearby_peers
 
 @app.get("/api/discover")
 async def discover_files(
@@ -194,6 +226,12 @@ async def discover_files(
         if f.expires_at < now:
             continue
             
+        # If it's a targeted Drop, only show to target or uploader
+        if f.target_peer_id:
+             # We can't strictly check target on discovery without user ID 
+             # So we let UI filter by target ID or use IP subnet as heuristic
+             pass
+
         is_nearby = False
         
         # 1. Matching Subnet (Network Discovery)
@@ -284,6 +322,11 @@ async def cleanup_loop():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(cleanup_loop())
+
+@app.get("/-drop", response_class=HTMLResponse)
+async def get_drop():
+    with open("drop.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 # Serve static files (Frontend)
 app.mount("/static", StaticFiles(directory="."), name="static")
