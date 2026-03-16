@@ -81,6 +81,7 @@ class Peer(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     last_seen: float
+    source: Optional[str] = None # Added: 'Network' or 'Location'
 
 files_metadata: List[shared_bundle] = []
 active_peers: List[Peer] = []
@@ -201,13 +202,21 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
     nearby_peers = []
     for p in active_peers:
         peer_subnet = ".".join(p.ip.split(".")[:-1])
-        is_nearby = False
-        if peer_subnet == client_subnet: is_nearby = True
+        source = None
+        
+        # 1. Check Network (Subnet)
+        if peer_subnet == client_subnet:
+            source = "Network"
+        # 2. Check Location (Geo)
         elif lat is not None and lon is not None and p.lat is not None and p.lon is not None:
             dist = ((p.lat - lat)**2 + (p.lon - lon)**2)**0.5
-            if dist < 0.005: is_nearby = True
+            if dist < 0.005: 
+                source = "Location"
         
-        if is_nearby: nearby_peers.append(p)
+        if source:
+            p_copy = p.copy()
+            p_copy.source = source
+            nearby_peers.append(p_copy)
     return nearby_peers
 
 @app.get("/api/discover")

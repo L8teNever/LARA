@@ -307,9 +307,13 @@
                     const item = document.createElement('div');
                     item.className = 'peer-item';
                     item.onclick = () => startDrop(p);
+                    const sourceIcon = p.source === 'Network' ? '🌐' : '📍';
                     item.innerHTML = `
                         <div class="peer-avatar">${p.name[0].toUpperCase()}</div>
                         <div class="peer-name">${p.name}</div>
+                        <div style="font-size: 10px; opacity: 0.6; display: flex; align-items: center; gap: 4px;">
+                            <span>${sourceIcon}</span> ${p.source}
+                        </div>
                     `;
                     list.appendChild(item);
                 });
