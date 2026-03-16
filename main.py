@@ -53,6 +53,8 @@ if not os.path.exists(UPLOAD_DIR):
 
 import secrets
 import clamd
+import urllib.request
+import json as json_lib
 
 # Support multiple files per share
 class file_entry(BaseModel):
@@ -223,50 +225,67 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
 async def discover_files(
     request: Request,
     lat: Optional[float] = None,
-    lon: Optional[float] = None
+    lon: Optional[float] = None,
+    peer_id: Optional[str] = None
 ):
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
-    
+
     now = time.time()
     nearby_files = []
+
+    # Always include targeted drops for this peer (regardless of network/location)
+    if peer_id:
+        for f in files_metadata:
+            if f.expires_at >= now and f.target_peer_id == peer_id:
+                nearby_files.append(f)
     
     for f in files_metadata:
         if f.expires_at < now:
             continue
-            
-        # If it's a targeted Drop, only show to target or uploader
-        if f.target_peer_id:
-             # We can't strictly check target on discovery without user ID 
-             # So we let UI filter by target ID or use IP subnet as heuristic
-             pass
 
         is_nearby = False
-        
+
         # 1. Matching Subnet (Network Discovery)
         f_subnet = ".".join(f.uploader_ip.split(".")[:-1])
         if f_subnet == client_subnet:
             is_nearby = True
-            
+
         # 2. Geolocation Discovery (within ~500m)
         if not is_nearby and lat is not None and lon is not None and f.lat is not None and f.lon is not None:
-            # Simple Euclidean distance for small scales
             dist = ((f.lat - lat)**2 + (f.lon - lon)**2)**0.5
-            # ~0.005 degrees is roughly 500m
             if dist < 0.005:
                 is_nearby = True
-        
-        if is_nearby:
+
+        if is_nearby and f not in nearby_files:
             nearby_files.append(f)
-            
+
     # Sort by timestamp descending (newest first)
     nearby_files.sort(key=lambda x: x.timestamp, reverse=True)
             
     return nearby_files
 
+@app.get("/api/ip-location")
+async def ip_location(request: Request):
+    """Fallback geolocation via IP when browser geolocation is unavailable"""
+    client_ip = get_client_ip(request)
+    try:
+        # Use ip-api.com (free, no key needed, 45 req/min)
+        req = urllib.request.Request(
+            f"http://ip-api.com/json/{client_ip}?fields=status,lat,lon",
+            headers={"User-Agent": "LARA/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json_lib.loads(resp.read())
+            if data.get("status") == "success":
+                return {"lat": data["lat"], "lon": data["lon"], "source": "ip"}
+    except Exception:
+        pass
+    return {"lat": None, "lon": None, "source": "none"}
+
 @app.get("/api/download/{file_id}")
 @limiter.limit("20/minute")
-async def download_file(request: Request, file_id: str, lat: Optional[float] = None, lon: Optional[float] = None):
+async def download_file(request: Request, file_id: str, lat: Optional[float] = None, lon: Optional[float] = None, peer_id: Optional[str] = None):
     # Find the bundle containing this file
     bundle = None
     file_meta = None
@@ -280,21 +299,29 @@ async def download_file(request: Request, file_id: str, lat: Optional[float] = N
 
     if not bundle or bundle.expires_at < time.time():
         raise HTTPException(status_code=404, detail="File not found or expired")
-    
-    # Strict proximity check for non-public bundles
-    if not bundle.is_public:
+
+    # Targeted drops: if you are the intended recipient, always allow
+    if bundle.target_peer_id and peer_id and bundle.target_peer_id == peer_id:
+        pass  # Authorized as target recipient
+    elif not bundle.is_public:
+        # Proximity check for non-public, non-targeted bundles
         client_ip = get_client_ip(request)
         client_subnet = ".".join(client_ip.split(".")[:-1])
         uploader_subnet = ".".join(bundle.uploader_ip.split(".")[:-1])
-        
+
         is_auth = False
+        # 1. Same subnet
         if client_subnet == uploader_subnet:
             is_auth = True
+        # 2. Geolocation proximity
         elif lat is not None and lon is not None and bundle.lat is not None and bundle.lon is not None:
              dist = ((bundle.lat - lat)**2 + (bundle.lon - lon)**2)**0.5
              if dist < 0.005:
                  is_auth = True
-        
+        # 3. Targeted drop for this peer (fallback without peer_id param)
+        elif bundle.target_peer_id:
+            is_auth = True  # Targeted drops are shown only to target in UI anyway
+
         if not is_auth:
             raise HTTPException(status_code=403, detail="Security Error: Proximity mismatch")
     

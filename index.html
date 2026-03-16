@@ -572,15 +572,58 @@
             if (val) { localStorage.setItem('lara_peer_name', val); myName = val; document.getElementById('name-modal').style.display = 'none'; initApp(); }
         }
 
+        function updateGeoStatus(text, color) {
+            const st = document.getElementById('geo-status-text');
+            st.innerText = text;
+            st.style.color = color;
+        }
+
+        async function tryIpGeolocation() {
+            try {
+                const res = await fetch('/api/ip-location');
+                const data = await res.json();
+                if (data.lat && data.lon) {
+                    userCoords.lat = data.lat;
+                    userCoords.lon = data.lon;
+                    updateGeoStatus('Aktiv (via IP)', '#0066ff');
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        }
+
         function initApp() {
             document.getElementById('display-user-name').innerText = myName;
             document.getElementById('user-name-input').value = myName;
+
+            // Geolocation: watchPosition for continuous updates + IP fallback
             if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    userCoords.lat = pos.coords.latitude; userCoords.lon = pos.coords.longitude;
-                    const st = document.getElementById('geo-status-text'); st.innerText = "Aktiviert"; st.style.color = "#0066ff";
+                updateGeoStatus('Wird ermittelt...', '#f59e0b');
+                navigator.geolocation.watchPosition(
+                    pos => {
+                        userCoords.lat = pos.coords.latitude;
+                        userCoords.lon = pos.coords.longitude;
+                        updateGeoStatus('Aktiv (GPS)', '#0066ff');
+                    },
+                    async err => {
+                        console.warn('Geolocation error:', err.message);
+                        if (err.code === 1) {
+                            updateGeoStatus('Abgelehnt — IP Fallback...', '#f59e0b');
+                        } else {
+                            updateGeoStatus('Nicht verfügbar — IP Fallback...', '#f59e0b');
+                        }
+                        const ok = await tryIpGeolocation();
+                        if (!ok) updateGeoStatus('Nicht verfügbar', '#ef4444');
+                    },
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+                );
+            } else {
+                updateGeoStatus('Wird via IP ermittelt...', '#f59e0b');
+                tryIpGeolocation().then(ok => {
+                    if (!ok) updateGeoStatus('Nicht verfügbar', '#ef4444');
                 });
             }
+
             setInterval(registerMe, 5000); registerMe();
             setInterval(fetchPeers, 3000); fetchPeers();
             setInterval(refreshActivity, 4000); refreshActivity();
@@ -722,7 +765,9 @@
         }
 
         async function refreshActivity() {
-            let url = '/api/discover'; if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            let params = [`peer_id=${encodeURIComponent(myId)}`];
+            if (userCoords.lat) { params.push(`lat=${userCoords.lat}`); params.push(`lon=${userCoords.lon}`); }
+            let url = '/api/discover?' + params.join('&');
             const res = await fetch(url); const shares = await res.json();
 
             // 1. Incoming Directed Drops — detect NEW ones for popup
@@ -821,7 +866,7 @@
             const dlBtn = document.getElementById('preview-download-btn');
             fileName.innerText = "Empfange Freigabe"; fileMeta.innerText = `${bundle.files.length} Datei(en)`; dlBtn.style.display = 'none';
             content.innerHTML = `<div class="w-full max-w-lg space-y-3 sm:space-y-4 px-1 sm:px-2">${bundle.files.map(f => {
-                let dlUrl = `/api/download/${f.id}`; if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                let dlUrl = `/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`; if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
                 return `<div class="bg-white p-3 sm:p-4 rounded-[18px] sm:rounded-[24px] border border-purple-100 shadow-sm flex items-center justify-between gap-2">
                             <div class="flex items-center gap-2 sm:gap-3 min-w-0">
                                 <div class="p-2 sm:p-3 bg-purple-50 rounded-xl sm:rounded-2xl text-purple-600 shrink-0"><i data-lucide="file" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
