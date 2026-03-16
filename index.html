@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LARA - Nearby Drop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Fallback / Initial styles to prevent FOUC */
+        body {
+            font-family: 'Outfit', sans-serif;
+            visibility: hidden;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.body.style.visibility = "visible";
+        });
+    </script>
+</head>
+
+<body>
+    <header>
+        <h1>LARA</h1>
+        <div class="radar"></div>
+    </header>
+
+    <main class="main-container">
+        <!-- Upload Section -->
+        <section class="card">
+            <h2 class="section-title">Send Files</h2>
+            <div class="drop-zone" id="drop-zone">
+                <div class="icon">📤</div>
+                <p>Drop files here or click to select</p>
+                <input type="file" id="file-input" hidden multiple>
+            </div>
+        </section>
+
+        <!-- Discovery Section -->
+        <section class="card"
+            style="background-color: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);">
+            <h2 class="section-title">Nearby Files</h2>
+            <div class="nearby-list" id="nearby-list">
+                <!-- Nearby files will appear here -->
+                <p style="opacity: 0.7; text-align: center; padding: 20px;">Watching for files in your vicinity...</p>
+            </div>
+        </section>
+    </main>
+
+    <div id="status"></div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const nearbyList = document.getElementById('nearby-list');
+        const statusEl = document.getElementById('status');
+
+        let userCoords = { lat: null, lon: null };
+
+        // Get Location
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                userCoords.lat = pos.coords.latitude;
+                userCoords.lon = pos.coords.longitude;
+                showStatus("Location pinned for proximity sharing");
+            }, err => {
+                console.warn("Location denied, falling back to network discovery only");
+            });
+        }
+
+        function showStatus(msg) {
+            statusEl.innerText = msg;
+            statusEl.style.display = 'block';
+            setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+        }
+
+        // Upload Logic
+        dropZone.onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => handleFiles(e.target.files);
+
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        };
+
+        dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        };
+
+        async function handleFiles(files) {
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
+                if (userCoords.lat) {
+                    formData.append('lat', userCoords.lat);
+                    formData.append('lon', userCoords.lon);
+                }
+
+                showStatus(`Sending ${file.name}...`);
+
+                try {
+                    const res = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (res.ok) {
+                        showStatus(`Shared ${file.name} successfully!`);
+                    }
+                } catch (err) {
+                    showStatus("Upload failed!");
+                }
+            }
+        }
+
+        // Discovery Logic
+        async function fetchNearby() {
+            let url = '/api/discover';
+            if (userCoords.lat) {
+                url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            }
+
+            try {
+                const res = await fetch(url);
+                const files = await res.json();
+
+                if (files.length === 0) {
+                    nearbyList.innerHTML = '<p style="opacity: 0.7; text-align: center; padding: 20px;">No files found nearby right now.</p>';
+                    return;
+                }
+
+                nearbyList.innerHTML = '';
+                files.forEach(f => {
+                    const div = document.createElement('div');
+                    div.className = 'file-item';
+                    const size = (f.size / 1024).toFixed(1) + ' KB';
+                    div.innerHTML = `
+                        <div class="file-info">
+                            <span class="file-name">${f.filename}</span>
+                            <span class="file-meta">${size} • from ${f.uploader_ip}</span>
+                        </div>
+                        <button class="btn" onclick="window.open('/api/download/${f.id}')">Receive</button>
+                    `;
+                    nearbyList.appendChild(div);
+                });
+            } catch (err) {
+                console.error("Discovery error", err);
+            }
+        }
+
+        // Polling for nearby files
+        setInterval(fetchNearby, 3000);
+        fetchNearby();
+    </script>
+</body>
+
+</html>
