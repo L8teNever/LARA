@@ -67,10 +67,11 @@ class shared_bundle(BaseModel):
     id: str
     files: List[file_entry]
     uploader_ip: str
-    uploader_name: Optional[str] = None # Added for Drop
-    target_peer_id: Optional[str] = None # Added for Drop
+    uploader_name: Optional[str] = None
+    target_peer_id: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    coord_source: Optional[str] = None  # "gps" or "ip"
     timestamp: float
     expires_at: float
     is_public: bool = False
@@ -82,11 +83,25 @@ class Peer(BaseModel):
     ip: str
     lat: Optional[float] = None
     lon: Optional[float] = None
+    coord_source: Optional[str] = None  # "gps" or "ip"
     last_seen: float
-    source: Optional[str] = None # Added: 'Network' or 'Location'
+    source: Optional[str] = None  # Discovery source: 'Network' or 'Location'
 
 files_metadata: List[shared_bundle] = []
 active_peers: List[Peer] = []
+
+def is_nearby_geo(lat1, lon1, src1, lat2, lon2, src2) -> bool:
+    """Check if two coordinates are nearby, with dynamic radius based on source accuracy.
+    GPS+GPS: 500m (0.005°), GPS+IP: 10km (0.1°), IP+IP: 20km (0.2°)"""
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+        return False
+    dist = ((lat1 - lat2)**2 + (lon1 - lon2)**2)**0.5
+    if src1 == "gps" and src2 == "gps":
+        return dist < 0.005   # ~500m — both precise
+    elif src1 == "gps" or src2 == "gps":
+        return dist < 0.1     # ~10km — one precise, one city-level
+    else:
+        return dist < 0.2     # ~20km — both city-level (IP)
 
 def get_client_ip(request: Request):
     # Try to get the real IP if behind a proxy
@@ -185,10 +200,13 @@ async def upload_file(
     if is_public:
         access_token = secrets.token_urlsafe(192)
     
-    # IP geolocation fallback for uploads without coords
+    # Track coord source and apply IP fallback
     uploader_ip = get_client_ip(request)
+    upload_coord_source = "gps" if (lat is not None and lon is not None) else None
     if lat is None or lon is None:
         lat, lon = ip_to_coords(uploader_ip)
+        if lat is not None:
+            upload_coord_source = "ip"
 
     now = time.time()
     metadata = shared_bundle(
@@ -199,6 +217,7 @@ async def upload_file(
         target_peer_id=target_peer_id,
         lat=lat,
         lon=lon,
+        coord_source=upload_coord_source,
         timestamp=now,
         expires_at=now + (expires_in * 3600),
         is_public=is_public,
@@ -224,19 +243,24 @@ async def register_peer(request: Request, peer: Peer):
         if ip_lat is not None:
             peer.lat = ip_lat
             peer.lon = ip_lon
+            peer.coord_source = "ip"
 
     active_peers.append(peer)
     return {"status": "ok"}
 
 @app.get("/api/peers/discover")
-async def discover_peers(request: Request, lat: Optional[float] = None, lon: Optional[float] = None):
+async def discover_peers(request: Request, lat: Optional[float] = None, lon: Optional[float] = None, coord_source: Optional[str] = None):
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
     now = time.time()
 
+    # Determine client coord source
+    client_coord_source = coord_source or "gps"
+
     # IP geolocation fallback for the requesting client
     if lat is None or lon is None:
         lat, lon = ip_to_coords(client_ip)
+        client_coord_source = "ip"
 
     # Cleanup old peers (not seen for 30s)
     to_remove = [p for p in active_peers if now - p.last_seen > 30]
@@ -247,19 +271,16 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
         peer_subnet = ".".join(p.ip.split(".")[:-1])
         sources = []
 
-        # 1. Check Network (Subnet)
+        # 1. Check Network (same subnet = same WLAN)
         if peer_subnet == client_subnet:
             sources.append("Network")
 
-        # 2. Check Location (Geo) — always check, even if same subnet
-        if lat is not None and lon is not None and p.lat is not None and p.lon is not None:
-            dist = ((p.lat - lat)**2 + (p.lon - lon)**2)**0.5
-            if dist < 0.005:
-                sources.append("Location")
+        # 2. Check Location (GPS/IP) — always check, with dynamic radius
+        if is_nearby_geo(lat, lon, client_coord_source, p.lat, p.lon, p.coord_source or "gps"):
+            sources.append("Location")
 
         if sources:
             p_copy = p.copy()
-            # Prefer "Network" label if both match, otherwise use what we have
             p_copy.source = "Network" if "Network" in sources else "Location"
             nearby_peers.append(p_copy)
     return nearby_peers
@@ -269,14 +290,18 @@ async def discover_files(
     request: Request,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
-    peer_id: Optional[str] = None
+    peer_id: Optional[str] = None,
+    coord_source: Optional[str] = None
 ):
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
 
+    client_coord_source = coord_source or "gps"
+
     # IP geolocation fallback
     if lat is None or lon is None:
         lat, lon = ip_to_coords(client_ip)
+        client_coord_source = "ip"
 
     now = time.time()
     nearby_files = []
@@ -293,16 +318,14 @@ async def discover_files(
 
         is_nearby = False
 
-        # 1. Matching Subnet (Network Discovery)
+        # 1. Matching Subnet (same WLAN)
         f_subnet = ".".join(f.uploader_ip.split(".")[:-1])
         if f_subnet == client_subnet:
             is_nearby = True
 
-        # 2. Geolocation Discovery (within ~500m)
-        if not is_nearby and lat is not None and lon is not None and f.lat is not None and f.lon is not None:
-            dist = ((f.lat - lat)**2 + (f.lon - lon)**2)**0.5
-            if dist < 0.005:
-                is_nearby = True
+        # 2. Geolocation (dynamic radius based on coord source)
+        if not is_nearby and is_nearby_geo(lat, lon, client_coord_source, f.lat, f.lon, f.coord_source or "gps"):
+            is_nearby = True
 
         if is_nearby and f not in nearby_files:
             nearby_files.append(f)

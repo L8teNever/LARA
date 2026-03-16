@@ -558,7 +558,8 @@
         lucide.createIcons();
         let myId = localStorage.getItem('lara_peer_id') || Math.random().toString(36).substring(2, 15);
         let myName = localStorage.getItem('lara_peer_name');
-        let selectedFiles = []; let userCoords = { lat: null, lon: null };
+        let selectedFiles = [];
+        let userCoords = { lat: null, lon: null, source: null }; // source: "gps" or "ip"
         let seenDropIds = new Set();
         let currentDropBundle = null;
         localStorage.setItem('lara_peer_id', myId);
@@ -585,6 +586,7 @@
                 if (data.lat && data.lon) {
                     userCoords.lat = data.lat;
                     userCoords.lon = data.lon;
+                    userCoords.source = 'ip';
                     updateGeoStatus('Aktiv (via IP)', '#0066ff');
                     return true;
                 }
@@ -603,6 +605,7 @@
                     pos => {
                         userCoords.lat = pos.coords.latitude;
                         userCoords.lon = pos.coords.longitude;
+                        userCoords.source = 'gps';
                         updateGeoStatus('Aktiv (GPS)', '#0066ff');
                     },
                     async err => {
@@ -641,7 +644,7 @@
             if (!myName) return;
             await fetch('/api/peers/register', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, last_seen: 0 })
+                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0 })
             });
         }
 
@@ -655,7 +658,8 @@
         let currentPeerIds = new Set();
 
         async function fetchPeers() {
-            let url = '/api/peers/discover'; if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            let url = '/api/peers/discover';
+            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}&coord_source=${userCoords.source || 'gps'}`;
             const res = await fetch(url); const peers = await res.json();
             const container = document.getElementById('nearby-peers-radar');
             const others = peers.filter(p => p.id !== myId);
@@ -766,7 +770,7 @@
 
         async function refreshActivity() {
             let params = [`peer_id=${encodeURIComponent(myId)}`];
-            if (userCoords.lat) { params.push(`lat=${userCoords.lat}`); params.push(`lon=${userCoords.lon}`); }
+            if (userCoords.lat) { params.push(`lat=${userCoords.lat}`); params.push(`lon=${userCoords.lon}`); params.push(`coord_source=${userCoords.source || 'gps'}`); }
             let url = '/api/discover?' + params.join('&');
             const res = await fetch(url); const shares = await res.json();
 
