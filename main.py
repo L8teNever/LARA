@@ -323,7 +323,7 @@ async def cleanup_loop():
 async def startup_event():
     asyncio.create_task(cleanup_loop())
 
-@app.get("/-drop", response_class=HTMLResponse)
+@app.get("/drop", response_class=HTMLResponse)
 async def get_drop():
     with open("drop.html", "r", encoding="utf-8") as f:
         return f.read()
