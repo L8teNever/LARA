@@ -39,11 +39,21 @@
                 <p>Drop files here or click to select</p>
                 <input type="file" id="file-input" hidden multiple>
             </div>
-            <div class="share-options" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+            <div class="share-options" style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px;">
                 <label class="switch-container" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="public-share" style="width: 20px; height: 20px;">
                     <span style="font-size: 14px; font-weight: 500;">Create Global Link & QR Code</span>
                 </label>
+
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 14px; opacity: 0.8;">Expire in:</span>
+                    <select id="expires-in"
+                        style="background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); border: 1px solid var(--md-sys-color-outline); border-radius: 8px; padding: 4px 8px; font-size: 14px;">
+                        <option value="1" selected>1 Hour (Default)</option>
+                        <option value="5">5 Hours</option>
+                        <option value="24">24 Hours</option>
+                    </select>
+                </div>
             </div>
             <div id="qr-container" class="file-item"
                 style="margin-top: 16px; display: none; flex-direction: column; gap: 12px; border-style: dashed;">
@@ -116,6 +126,7 @@
 
         async function handleFiles(files) {
             const isPublic = document.getElementById('public-share').checked;
+            const expiresIn = document.getElementById('expires-in').value;
             const qrContainer = document.getElementById('qr-container');
             const qrcodeEl = document.getElementById('qrcode');
             const shareUrlInput = document.getElementById('share-url');
@@ -127,6 +138,7 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('is_public', isPublic);
+                formData.append('expires_in', expiresIn);
 
                 if (userCoords.lat) {
                     formData.append('lat', userCoords.lat);

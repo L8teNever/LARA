@@ -25,6 +25,7 @@ class shared_file(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     timestamp: float
+    expires_at: float
     is_public: bool = False
     access_token: Optional[str] = None
 
@@ -43,20 +44,21 @@ async def upload_file(
     file: UploadFile = File(...),
     lat: Optional[float] = Form(None),
     lon: Optional[float] = Form(None),
-    is_public: bool = Form(False)
+    is_public: bool = Form(False),
+    expires_in: int = Form(1) # Default 1 hour
 ):
     file_id = str(uuid.uuid4())
     file_path = os.path.join(UPLOAD_DIR, file_id)
     
     access_token = None
     if is_public:
-        # Generate a very long, unguessable token for public sharing
         access_token = secrets.token_urlsafe(48)
     
     with open(file_path, "wb") as buffer:
         content = await file.read()
         buffer.write(content)
     
+    now = time.time()
     metadata = shared_file(
         id=file_id,
         filename=file.filename,
@@ -65,7 +67,8 @@ async def upload_file(
         uploader_ip=get_client_ip(request),
         lat=lat,
         lon=lon,
-        timestamp=time.time(),
+        timestamp=now,
+        expires_at=now + (expires_in * 3600),
         is_public=is_public,
         access_token=access_token
     )
@@ -75,7 +78,8 @@ async def upload_file(
         "status": "success", 
         "file_id": file_id, 
         "is_public": is_public,
-        "access_token": access_token
+        "access_token": access_token,
+        "expires_at": metadata.expires_at
     }
 
 @app.get("/api/discover")
@@ -87,12 +91,13 @@ async def discover_files(
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
     
+    now = time.time()
     nearby_files = []
     
     for f in files_metadata:
-        # Avoid showing own files (simplification for demo)
-        # if f.uploader_ip == client_ip: continue 
-        
+        if f.expires_at < now:
+            continue
+            
         is_nearby = False
         
         # 1. Matching Subnet (Network Discovery)
@@ -116,12 +121,8 @@ async def discover_files(
 @app.get("/api/download/{file_id}")
 async def download_file(file_id: str):
     file_meta = next((f for f in files_metadata if f.id == file_id), None)
-    if not file_meta:
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    # Check if file is private and requester is NOT on the same subnet/nearby
-    # For now, we allow regular download if the user has the ID, 
-    # but the explorer only shows them if nearby.
+    if not file_meta or file_meta.expires_at < time.time():
+        raise HTTPException(status_code=404, detail="File not found or expired")
     
     file_path = os.path.join(UPLOAD_DIR, file_id)
     if not os.path.exists(file_path):
@@ -131,13 +132,39 @@ async def download_file(file_id: str):
 
 @app.get("/api/p/{access_token}")
 async def public_download(access_token: str):
-    # Public downloads via long random token
     file_meta = next((f for f in files_metadata if f.access_token == access_token), None)
-    if not file_meta:
+    if not file_meta or file_meta.expires_at < time.time():
         raise HTTPException(status_code=404, detail="Invalid or expired link")
         
     file_path = os.path.join(UPLOAD_DIR, file_meta.id)
     return FileResponse(file_path, filename=file_meta.filename, media_type=file_meta.content_type)
+
+from fastapi.concurrency import run_in_threadpool
+import asyncio
+
+async def cleanup_loop():
+    while True:
+        now = time.time()
+        to_remove = []
+        for f in files_metadata:
+            if f.expires_at < now:
+                to_remove.append(f)
+        
+        for f in to_remove:
+            files_metadata.remove(f)
+            file_path = os.path.join(UPLOAD_DIR, f.id)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    print(f"Cleanup: Deleted expired file {f.filename}")
+                except:
+                    pass
+        
+        await asyncio.sleep(60) # Run cleanup every minute
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(cleanup_loop())
 
 # Serve static files (Frontend)
 app.mount("/static", StaticFiles(directory="."), name="static")
