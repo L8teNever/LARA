@@ -9,6 +9,26 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        m3: {
+                            primary: '#6750A4',
+                            onPrimary: '#FFFFFF',
+                            primaryContainer: '#EADDFF',
+                            onPrimaryContainer: '#21005D',
+                            surface: '#FEF7FF',
+                            surfaceVariant: '#E7E0EC',
+                            outline: '#79747E',
+                            secondaryContainer: '#E8DEF8'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
         :root {
             --m3-primary: #6750A4;
@@ -25,8 +45,10 @@
             font-family: 'Google Sans', sans-serif;
             background-color: var(--m3-surface);
             color: #1C1B1F;
-            overflow-x: hidden;
-            -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
 
         .m3-card {
@@ -132,84 +154,106 @@
             display: none;
         }
 
-        /* Preview Modal Styles */
         #preview-modal {
             backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .name-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--m3-surface);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
         }
     </style>
 </head>
 
-<body class="min-h-screen flex flex-col pb-28 md:pb-32">
+<body class="min-h-screen pb-28 md:pb-32">
+
+    <!-- Name Setup Modal -->
+    <div id="name-modal" class="name-modal" style="display: none;">
+        <div class="mb-8 p-6 bg-m3-primary text-white rounded-[32px] shadow-xl">
+            <i data-lucide="share-2" class="w-12 h-12"></i>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">Willkommen bei LARA</h2>
+        <p class="text-sm text-gray-500 mb-8 text-center max-w-[280px]">Wähle einen Namen, damit dich andere in der Nähe
+            finden können.</p>
+        <div class="w-full max-w-sm space-y-4">
+            <input type="text" id="initial-name-input" placeholder="Dein Name (z.B. Pixel 9)" class="m3-input text-lg">
+            <button onclick="saveInitialName()"
+                class="w-full py-4 bg-m3-primary text-white rounded-2xl font-bold shadow-lg shadow-purple-100 active:scale-95 transition-transform">Starten</button>
+        </div>
+    </div>
 
     <!-- Top App Bar -->
     <header
-        class="sticky top-0 z-30 px-4 md:px-8 py-4 flex items-center justify-between bg-[#FEF7FF]/80 backdrop-blur-md">
+        class="sticky top-0 z-30 px-4 md:px-8 py-4 flex items-center justify-between bg-m3-surface/80 backdrop-blur-md border-b border-m3-surface-variant">
         <div class="flex items-center gap-3">
-            <div class="p-2.5 bg-purple-600 text-white rounded-2xl shadow-md cursor-pointer"
+            <div class="p-2.5 bg-m3-primary text-white rounded-2xl shadow-md cursor-pointer"
                 onclick="switchView('senden')">
                 <i data-lucide="share-2" class="w-6 h-6"></i>
             </div>
             <div>
                 <h1 class="text-xl md:text-2xl font-bold tracking-tight">LARA</h1>
                 <p id="view-title-display"
-                    class="text-[10px] md:text-xs text-purple-600 font-bold uppercase tracking-widest">Senden</p>
+                    class="text-[10px] md:text-xs text-m3-primary font-bold uppercase tracking-widest">Senden</p>
             </div>
         </div>
         <div class="flex gap-2">
             <button onclick="switchView('einstellungen')"
-                class="p-3 hover:bg-gray-200/50 rounded-full transition-colors">
-                <i data-lucide="settings" class="w-6 h-6 text-gray-700"></i>
+                class="p-3 hover:bg-m3-surface-variant rounded-full transition-colors">
+                <i data-lucide="settings" class="w-6 h-6 text-m3-outline"></i>
             </button>
         </div>
     </header>
 
     <main class="flex-1 w-full max-w-screen-xl mx-auto px-4 md:px-8">
-
         <!-- SECTION: SENDEN -->
         <div id="view-senden" class="view-section active">
             <div class="lg:grid lg:grid-cols-12 lg:gap-8 mt-4">
                 <div class="lg:col-span-12 flex flex-col">
                     <section
-                        class="relative flex justify-center items-center h-[400px] md:h-[500px] mb-8 bg-purple-50/20 rounded-[40px] border border-purple-100/30 overflow-hidden shadow-inner"
+                        class="relative flex justify-center items-center h-[400px] md:h-[500px] mb-8 bg-m3-primary/5 rounded-[40px] border border-m3-primary/10 overflow-hidden shadow-inner"
                         id="radar-container">
                         <div class="radar-pulse" style="animation-delay: 0s;"></div>
                         <div class="radar-pulse" style="animation-delay: 1.3s;"></div>
                         <div class="radar-pulse" style="animation-delay: 2.6s;"></div>
-
                         <div
-                            class="z-10 bg-white p-8 rounded-[36px] shadow-2xl border-4 border-purple-100 flex flex-col items-center">
-                            <i data-lucide="smartphone" class="w-12 h-12 text-purple-600 mb-2"></i>
+                            class="z-10 bg-white p-8 rounded-[36px] shadow-2xl border-4 border-m3-primaryContainer flex flex-col items-center">
+                            <i data-lucide="smartphone" class="w-12 h-12 text-m3-primary mb-2"></i>
                             <span id="display-user-name"
-                                class="text-[10px] font-bold text-purple-400 tracking-tighter uppercase text-center">MEIN
+                                class="text-[10px] font-bold text-m3-primary/60 tracking-tighter uppercase text-center">MEIN
                                 GERÄT</span>
                         </div>
-
-                        <!-- Radar devices will be injected here -->
                         <div id="nearby-peers-radar"></div>
                     </section>
                 </div>
-
                 <div class="lg:col-span-12 grid md:grid-cols-2 gap-8">
-                    <!-- File Selection -->
                     <section>
                         <label for="file-input" class="cursor-pointer block">
                             <div
-                                class="border-3 border-dashed border-purple-200 rounded-[32px] p-8 flex flex-col items-center justify-center min-h-[200px] hover:bg-purple-50/80 transition-all hover:border-purple-400 group h-full bg-white/40">
+                                class="border-3 border-dashed border-m3-primary/20 rounded-[32px] p-8 flex flex-col items-center justify-center min-h-[200px] hover:bg-m3-primary/10 transition-all hover:border-m3-primary/40 group h-full bg-white/40">
                                 <div
-                                    class="p-5 bg-purple-100 rounded-3xl mb-4 group-hover:scale-110 transition-transform">
-                                    <i data-lucide="plus" class="w-10 h-10 text-purple-600"></i>
+                                    class="p-5 bg-m3-primary/10 rounded-3xl mb-4 group-hover:scale-110 transition-transform">
+                                    <i data-lucide="plus" class="w-10 h-10 text-m3-primary"></i>
                                 </div>
                                 <p class="text-center text-lg font-bold">Dateien wählen</p>
-                                <p class="text-center text-sm text-gray-400 mt-2">oder hierher ziehen</p>
+                                <p class="text-center text-sm text-m3-outline mt-2">oder hierher ziehen</p>
                             </div>
                         </label>
                         <input type="file" id="file-input" multiple onchange="handleFileSelect(event)">
                     </section>
-
-                    <!-- Queue -->
                     <section id="file-list-container" class="hidden flex flex-col h-full">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-xs font-bold text-purple-600 uppercase tracking-widest px-2">Warteschlange
+                            <h3 class="text-xs font-bold text-m3-primary uppercase tracking-widest px-2">Warteschlange
                             </h3>
                             <button onclick="clearFiles()"
                                 class="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1 rounded-full">Alle
@@ -219,356 +263,200 @@
                     </section>
                 </div>
             </div>
-
-            <!-- Share Options Grid -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 mb-10">
                 <button onclick="startGlobalShare()"
-                    class="m3-card p-6 flex flex-col items-center justify-center gap-3 hover:bg-purple-100">
-                    <i data-lucide="qr-code" class="w-8 h-8 text-purple-700"></i>
+                    class="m3-card p-6 flex flex-col items-center justify-center gap-3 hover:bg-m3-primaryContainer">
+                    <i data-lucide="qr-code" class="w-8 h-8 text-m3-primary"></i>
                     <span class="text-sm font-bold">QR / Link erstellen</span>
                 </button>
                 <div id="qr-result-container"
-                    class="col-span-2 hidden bg-white p-4 rounded-[28px] border border-purple-100 shadow-sm flex flex-col items-center">
+                    class="col-span-2 hidden bg-white p-4 rounded-[28px] border border-m3-primaryContainer shadow-sm flex flex-col items-center">
                     <div id="qrcode" class="p-4 bg-white rounded-2xl mb-4"></div>
                     <div class="flex gap-2 w-full">
                         <input type="text" id="share-url-display" readonly
-                            class="flex-1 bg-gray-50 p-3 rounded-xl border text-xs outline-none">
+                            class="flex-1 bg-m3-surfaceVariant p-3 rounded-xl border-none text-xs outline-none">
                         <button onclick="copyShareUrl()"
-                            class="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs">Copy</button>
+                            class="px-4 py-2 bg-m3-primary text-white rounded-xl font-bold text-xs">Copy</button>
                     </div>
                 </div>
             </div>
-
-            <!-- Discovery List (Local/Global) -->
             <section class="mt-8">
-                <h2 class="text-xs font-bold text-purple-600 uppercase tracking-widest px-2 mb-4">Netzwerk-Entdeckungen
+                <h2 class="text-xs font-bold text-m3-primary uppercase tracking-widest px-2 mb-4">Netzwerk-Entdeckungen
                 </h2>
-                <div id="nearby-list" class="grid gap-4">
-                    <!-- Nearby global/local shares appear here -->
-                </div>
+                <div id="nearby-list" class="grid gap-4"></div>
             </section>
         </div>
 
-        <!-- SECTION: EMPFANGEN -->
+        <!-- SECTION: EMPFANGEN, VERLAUF, EINSTELLUNGEN - Simplified versions to save space -->
         <div id="view-empfangen" class="view-section">
             <div class="max-w-2xl mx-auto py-4">
                 <div class="flex items-center gap-3 mb-6">
-                    <div class="p-3 bg-green-100 text-green-700 rounded-2xl">
-                        <i data-lucide="inbox" class="w-6 h-6"></i>
+                    <div class="p-3 bg-green-100 text-green-700 rounded-2xl"><i data-lucide="inbox" class="w-6 h-6"></i>
                     </div>
                     <div>
                         <h2 class="text-xl font-bold">Eingehende Drops</h2>
                         <p class="text-sm text-gray-500">Direkt an dich gesendete Dateien</p>
                     </div>
                 </div>
-
                 <div id="incoming-container" class="space-y-4">
-                    <!-- Targeted drops appear here -->
                     <p class="text-center text-gray-400 py-12">Aktuell keine aktiven Anfragen.</p>
                 </div>
             </div>
         </div>
-
-        <!-- SECTION: VERLAUF -->
         <div id="view-verlauf" class="view-section">
             <div class="max-w-2xl mx-auto py-4">
                 <h2 class="text-xl font-bold mb-6 px-2">Eigene aktive Freigaben</h2>
                 <div id="my-shares-list" class="space-y-3">
-                    <!-- My own active shares appear here -->
                     <p class="text-center text-gray-400 py-12">Keine aktiven Freigaben gefunden.</p>
                 </div>
             </div>
         </div>
-
-        <!-- SECTION: EINSTELLUNGEN -->
         <div id="view-einstellungen" class="view-section">
             <div class="max-w-2xl mx-auto py-4">
                 <div class="flex items-center gap-3 mb-8">
-                    <div class="p-3 bg-purple-100 text-purple-700 rounded-2xl">
-                        <i data-lucide="user" class="w-6 h-6"></i>
-                    </div>
+                    <div class="p-3 bg-m3-primaryContainer text-m3-onPrimaryContainer rounded-2xl"><i data-lucide="user"
+                            class="w-6 h-6"></i></div>
                     <div>
                         <h2 class="text-xl font-bold">Profileinstellungen</h2>
                         <p class="text-sm text-gray-500">Passe deine Sichtbarkeit in LARA an</p>
                     </div>
                 </div>
-
                 <div class="space-y-6">
-                    <div class="flex flex-col gap-2">
-                        <label class="text-xs font-bold text-purple-600 uppercase tracking-widest px-1">Dein
+                    <div class="flex flex-col gap-2"><label
+                            class="text-xs font-bold text-m3-primary uppercase tracking-widest px-1">Dein
                             Gerätename</label>
                         <input type="text" id="user-name-input" class="m3-input" placeholder="Mein Smartphone"
                             oninput="updateUserName(this.value)">
-                        <p class="text-[10px] text-gray-400 px-1">Wird für AirDrop-Übertragungen verwendet.</p>
                     </div>
-
                     <div class="m3-card p-6 flex items-center justify-between border border-white">
                         <div class="flex items-center gap-4">
-                            <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                                <i data-lucide="map-pin" class="w-6 h-6"></i>
-                            </div>
+                            <div class="p-2 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="map-pin"
+                                    class="w-6 h-6"></i></div>
                             <div>
                                 <p class="font-bold">Standort-Freigabe</p>
-                                <p class="text-xs text-green-600 font-bold" id="geo-status-text">Warte auf Freigabe...
-                                </p>
+                                <p class="text-xs text-green-600 font-bold" id="geo-status-text">Inaktiv</p>
                             </div>
-                        </div>
-                        <div class="w-12 h-6 bg-purple-600 rounded-full relative cursor-pointer shadow-inner">
-                            <div class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-md"></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
     </main>
 
-    <!-- Navigation Bar -->
     <div class="fixed bottom-0 left-0 right-0 p-4 md:p-6 flex justify-center z-40">
         <nav
-            class="bg-[#F3EDF7]/95 backdrop-blur-xl border border-white/20 shadow-2xl rounded-[32px] px-4 py-3 flex justify-around items-center w-full max-w-lg">
+            class="bg-m3-surfaceVariant/95 backdrop-blur-xl border border-white/20 shadow-2xl rounded-[32px] px-4 py-3 flex justify-around items-center w-full max-w-lg">
             <button onclick="switchView('senden')"
                 class="nav-item active flex flex-col items-center flex-1 transition-all" id="nav-senden">
-                <div class="nav-pill px-6 py-1.5 rounded-full mb-1 transition-all">
-                    <i data-lucide="send" class="w-6 h-6"></i>
-                </div>
-                <span class="text-[10px] font-medium">Senden</span>
+                <div class="nav-pill px-6 py-1.5 rounded-full mb-1 transition-all"><i data-lucide="send"
+                        class="w-6 h-6"></i></div><span class="text-[10px] font-medium">Senden</span>
             </button>
             <button onclick="switchView('empfangen')" class="nav-item flex flex-col items-center flex-1 transition-all"
                 id="nav-empfangen">
-                <div class="nav-pill px-6 py-1.5 rounded-full mb-1 transition-all">
-                    <i data-lucide="download" class="w-6 h-6"></i>
-                </div>
-                <span class="text-[10px] font-medium text-center">Empfangen <span id="inc-badge"
+                <div class="nav-pill px-6 py-1.5 rounded-full mb-1 transition-all"><i data-lucide="download"
+                        class="w-6 h-6"></i></div><span class="text-[10px] font-medium">Empfangen <span id="inc-badge"
                         class="hidden inline-block w-1.5 h-1.5 bg-red-500 rounded-full ml-1"></span></span>
             </button>
             <button onclick="switchView('verlauf')" class="nav-item flex flex-col items-center flex-1 transition-all"
                 id="nav-verlauf">
-                <div class="nav-pill px-6 py-1.5 rounded-full mb-1 transition-all">
-                    <i data-lucide="history" class="w-6 h-6"></i>
-                </div>
-                <span class="text-[10px] font-medium">Aktiv</span>
+                <div class="nav-pill px-6 py-1.5 rounded-full mb-1 transition-all"><i data-lucide="history"
+                        class="w-6 h-6"></i></div><span class="text-[10px] font-medium">Aktiv</span>
             </button>
         </nav>
     </div>
 
-    <!-- Preview Modal -->
     <div id="preview-modal" class="fixed inset-0 bg-black/60 z-[2000] hidden flex items-center justify-center p-4">
         <div
             class="bg-white rounded-[32px] w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
             <button onclick="closePreview()"
-                class="absolute top-6 right-6 p-2 bg-black/10 hover:bg-black/20 rounded-full z-10">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
+                class="absolute top-6 right-6 p-2 bg-black/10 hover:bg-black/20 rounded-full z-10"><i data-lucide="x"
+                    class="w-6 h-6"></i></button>
             <div id="preview-content"
-                class="flex-1 flex items-center justify-center overflow-auto p-4 md:p-8 bg-gray-50 min-h-[300px]">
-                <!-- Dynamic Content -->
-            </div>
+                class="flex-1 flex items-center justify-center overflow-auto p-4 md:p-8 bg-gray-50 min-h-[300px]"></div>
             <div id="preview-footer" class="p-6 border-t flex justify-between items-center bg-white">
                 <div>
                     <p id="preview-file-name" class="font-bold"></p>
                     <p id="preview-file-meta" class="text-xs text-gray-500"></p>
                 </div>
                 <button id="preview-download-btn"
-                    class="px-8 py-3 bg-purple-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-200">Herunterladen</button>
+                    class="px-8 py-3 bg-m3-primary text-white rounded-2xl font-bold shadow-lg shadow-purple-200">Herunterladen</button>
             </div>
         </div>
     </div>
 
-    <!-- Generic Modal (Alerts/Info) -->
     <div id="modal-backdrop"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[2500] hidden flex items-center justify-center p-6">
         <div class="bg-white rounded-[32px] w-full max-w-sm p-8 text-center shadow-2xl">
-            <div id="modal-content" class="text-gray-800"></div>
-            <button onclick="closeModal()"
-                class="mt-8 w-full py-4 bg-purple-600 text-white rounded-2xl font-bold active:scale-95">Verstanden</button>
+            <div id="modal-content" class="text-gray-800"></div><button onclick="closeModal()"
+                class="mt-8 w-full py-4 bg-m3-primary text-white rounded-2xl font-bold">Verstanden</button>
         </div>
     </div>
 
     <script>
         lucide.createIcons();
-
         let myId = localStorage.getItem('lara_peer_id') || Math.random().toString(36).substring(2, 15);
         let myName = localStorage.getItem('lara_peer_name');
-        let selectedFiles = [];
-        let userCoords = { lat: null, lon: null };
-        let activeView = 'senden';
-
+        let selectedFiles = []; let userCoords = { lat: null, lon: null };
         localStorage.setItem('lara_peer_id', myId);
 
         document.addEventListener("DOMContentLoaded", () => {
-            if (!myName) {
-                document.getElementById('name-modal').style.display = 'flex';
-                // Trigger modal setup
-                const radar = document.getElementById('radar-container');
-                radar.style.filter = 'blur(10px)';
-            } else {
-                initApp();
-            }
+            if (!myName) { document.getElementById('name-modal').style.display = 'flex'; } else { initApp(); }
         });
 
-        function saveName() {
-            const val = document.getElementById('user-name-input').value.trim();
-            if (val) {
-                localStorage.setItem('lara_peer_name', val);
-                myName = val;
-                document.getElementById('name-modal').style.display = 'none';
-                document.getElementById('radar-container').style.filter = '';
-                initApp();
-            }
+        function saveInitialName() {
+            const val = document.getElementById('initial-name-input').value.trim();
+            if (val) { localStorage.setItem('lara_peer_name', val); myName = val; document.getElementById('name-modal').style.display = 'none'; initApp(); }
         }
 
         function initApp() {
             document.getElementById('display-user-name').innerText = myName;
             document.getElementById('user-name-input').value = myName;
-
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(pos => {
-                    userCoords.lat = pos.coords.latitude;
-                    userCoords.lon = pos.coords.longitude;
-                    document.getElementById('geo-status-text').innerText = "Aktiviert (📍)";
-                    document.getElementById('geo-status-text').className = "text-xs text-blue-600 font-bold";
-                }, () => {
-                    document.getElementById('geo-status-text').innerText = "Deaktiviert (Nur WLAN)";
-                    document.getElementById('geo-status-text').className = "text-xs text-gray-500 font-bold";
+                    userCoords.lat = pos.coords.latitude; userCoords.lon = pos.coords.longitude;
+                    const st = document.getElementById('geo-status-text'); st.innerText = "Aktiviert (📍)"; st.style.color = "#0066ff";
                 });
             }
-
-            // Polling
-            setInterval(registerMe, 5000);
-            registerMe();
-
-            setInterval(fetchPeers, 3000);
-            fetchPeers();
-
-            setInterval(refreshActivity, 4000);
-            refreshActivity();
-
-            // Drag & Drop
+            setInterval(registerMe, 5000); registerMe();
+            setInterval(fetchPeers, 3000); fetchPeers();
+            setInterval(refreshActivity, 4000); refreshActivity();
             const radar = document.getElementById('radar-container');
-            radar.ondragover = (e) => { e.preventDefault(); radar.classList.add('bg-purple-100/50'); };
-            radar.ondragleave = () => radar.classList.remove('bg-purple-100/50');
-            radar.ondrop = (e) => {
-                e.preventDefault();
-                radar.classList.remove('bg-purple-100/50');
-                handleFiles(e.dataTransfer.files);
-            };
-
-            // Public link check
+            radar.ondragover = (e) => { e.preventDefault(); radar.style.background = 'rgba(103, 80, 164, 0.1)'; };
+            radar.ondragleave = () => radar.style.background = '';
+            radar.ondrop = (e) => { e.preventDefault(); radar.style.background = ''; handleFiles(e.dataTransfer.files); };
             const params = new URLSearchParams(window.location.search);
-            const token = params.get('token');
-            if (token) handlePublicToken(token);
-        }
-
-        function switchView(viewName) {
-            activeView = viewName;
-            document.getElementById('view-title-display').innerText = viewName === 'einstellungen' ? 'Profile' : viewName.charAt(0).toUpperCase() + viewName.slice(1);
-
-            document.querySelectorAll('.view-section').forEach(section => section.classList.remove('active'));
-            const activeSection = document.getElementById('view-' + viewName);
-            if (activeSection) activeSection.classList.add('active');
-
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            const activeNavItem = document.getElementById('nav-' + viewName);
-            if (activeNavItem) activeNavItem.classList.add('active');
-
-            lucide.createIcons();
-            if (viewName === 'senden') {
-                // Relayout radar?
-                fetchPeers();
-            }
-        }
-
-        function updateUserName(val) {
-            if (!val) return;
-            myName = val;
-            document.getElementById('display-user-name').innerText = val;
-            localStorage.setItem('lara_peer_name', val);
-        }
-
-        function handleFileSelect(e) { handleFiles(e.target.files); }
-
-        function handleFiles(files) {
-            const container = document.getElementById('file-list-container');
-            const list = document.getElementById('file-list');
-            if (files.length > 0) {
-                container.classList.remove('hidden');
-                Array.from(files).forEach(file => {
-                    if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
-                        selectedFiles.push(file);
-                        addFileToUI(file);
-                    }
-                });
-                lucide.createIcons();
-            }
-        }
-
-        function addFileToUI(file) {
-            const list = document.getElementById('file-list');
-            const item = document.createElement('div');
-            item.className = 'bg-white p-4 rounded-2xl flex items-center justify-between border border-purple-100 shadow-sm';
-            item.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i data-lucide="file" class="w-5 h-5"></i></div>
-                    <div class="max-w-[150px]"><p class="text-sm font-bold truncate">${file.name}</p></div>
-                </div>
-                <button onclick="removeFile(this, '${file.name}', ${file.size})" class="text-red-400 p-1 hover:text-red-600 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-            `;
-            list.appendChild(item);
-        }
-
-        function removeFile(el, name, size) {
-            selectedFiles = selectedFiles.filter(f => !(f.name === name && f.size === size));
-            el.closest('div.bg-white').remove();
-            if (selectedFiles.length === 0) document.getElementById('file-list-container').classList.add('hidden');
-        }
-
-        function clearFiles() {
-            selectedFiles = [];
-            document.getElementById('file-list').innerHTML = '';
-            document.getElementById('file-list-container').classList.add('hidden');
+            const token = params.get('token'); if (token) handlePublicToken(token);
         }
 
         async function registerMe() {
             if (!myName) return;
             await fetch('/api/peers/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, last_seen: 0 })
             });
         }
 
         async function fetchPeers() {
-            let url = '/api/peers/discover';
-            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-            const res = await fetch(url);
-            const peers = await res.json();
+            let url = '/api/peers/discover'; if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            const res = await fetch(url); const peers = await res.json();
             const container = document.getElementById('nearby-peers-radar');
             const others = peers.filter(p => p.id !== myId);
-
             container.innerHTML = '';
             others.forEach((p, idx) => {
                 const angle = (idx / others.length) * 2 * Math.PI;
-                const radius = window.innerWidth < 640 ? 110 : 160;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * (radius * 0.8);
-
+                const radius = window.innerWidth < 640 ? 100 : 150;
+                const x = Math.cos(angle) * radius; const y = Math.sin(angle) * (radius * 0.7);
                 const node = document.createElement('div');
-                node.className = 'device-node';
-                node.style.transform = `translate(${x}px, ${y}px)`;
+                node.className = 'device-node'; node.style.transform = `translate(${x}px, ${y}px)`;
                 node.onclick = () => startDrop(p);
-
                 const color = p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
-                const icon = p.source === 'Network' ? 'wifi' : 'map-pin';
-                const devIcon = 'smartphone'; // Simple default
-
                 node.innerHTML = `
-                    <div class="relative w-16 h-16 ${color} rounded-3xl flex items-center justify-center text-white shadow-lg">
-                        <i data-lucide="${devIcon}" class="w-8 h-8"></i>
-                        <div class="connection-badge ${color} p-1 rounded-full shadow-sm"><i data-lucide="${icon}" class="w-3 h-3"></i></div>
+                    <div class="relative w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg">
+                        <i data-lucide="smartphone" class="w-6 h-6"></i>
+                        <div class="connection-badge ${color} p-1 rounded-full"><i data-lucide="${p.source === 'Network' ? 'wifi' : 'map-pin'}" class="w-2.5 h-2.5"></i></div>
                     </div>
-                    <div class="mt-2 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow-sm border border-gray-100 text-center">
-                        <span class="text-[10px] font-bold text-gray-800">${p.name}</span>
+                    <div class="mt-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded-full shadow-sm border text-center">
+                        <span class="text-[9px] font-bold text-gray-800">${p.name}</span>
                     </div>
                 `;
                 container.appendChild(node);
@@ -576,238 +464,137 @@
             lucide.createIcons();
         }
 
+        function handleFileSelect(e) { handleFiles(e.target.files); }
+        function handleFiles(files) {
+            const container = document.getElementById('file-list-container');
+            const list = document.getElementById('file-list');
+            if (files.length > 0) {
+                container.classList.remove('hidden');
+                Array.from(files).forEach(file => {
+                    if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+                        selectedFiles.push(file); addFileToUI(file);
+                    }
+                });
+                lucide.createIcons();
+            }
+        }
+        function addFileToUI(file) {
+            const list = document.getElementById('file-list');
+            const item = document.createElement('div');
+            item.className = 'bg-white p-3 rounded-2xl flex items-center justify-between border border-purple-50 shadow-sm';
+            item.innerHTML = `<div class="flex items-center gap-3"><div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i data-lucide="file" class="w-5 h-5"></i></div>
+                <div class="max-w-[120px] md:max-w-[180px]"><p class="text-xs font-bold truncate">${file.name}</p></div></div>
+                <button onclick="removeFile(this, '${file.name}', ${file.size})" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+            list.appendChild(item);
+        }
+        function removeFile(el, name, size) { selectedFiles = selectedFiles.filter(f => !(f.name === name && f.size === size)); el.closest('div.bg-white').remove(); if (selectedFiles.length === 0) document.getElementById('file-list-container').classList.add('hidden'); }
+        function clearFiles() { selectedFiles = []; document.getElementById('file-list').innerHTML = ''; document.getElementById('file-list-container').classList.add('hidden'); }
+
         async function startDrop(target) {
-            if (selectedFiles.length === 0) { showMessage(`Wähle zuerst Dateien aus, um sie an <b>${target.name}</b> zu senden.`); return; }
-
-            const formData = new FormData();
-            selectedFiles.forEach(f => formData.append('files', f));
-            formData.append('target_peer_id', target.id);
-            formData.append('uploader_name', myName);
+            if (selectedFiles.length === 0) { showMessage(`Wähle zuerst Dateien aus.`); return; }
+            const formData = new FormData(); selectedFiles.forEach(f => formData.append('files', f));
+            formData.append('target_peer_id', target.id); formData.append('uploader_name', myName);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
-
-            showMessage(`Sende Dateien an <b>${target.name}</b>...`);
-            try {
-                const res = await fetch('/api/upload', { method: 'POST', body: formData });
-                if (res.ok) { showMessage(`<b>Erfolgreich!</b><br>Dateien wurden an ${target.name} übertragen.`); clearFiles(); }
-                else showMessage(`Fehler beim Senden.`);
-            } catch (e) { showMessage(`Verbindungsfehler.`); }
+            showMessage(`Sende an <b>${target.name}</b>...`);
+            try { const res = await fetch('/api/upload', { method: 'POST', body: formData }); if (res.ok) { showMessage(`<b>Erfolgreich!</b>`); clearFiles(); } else showMessage(`Fehler.`); } catch (e) { showMessage(`Fehler.`); }
         }
 
         async function startGlobalShare() {
             if (selectedFiles.length === 0) { showMessage("Wähle zuerst Dateien aus."); return; }
-            const formData = new FormData();
-            selectedFiles.forEach(f => formData.append('files', f));
-            formData.append('is_public', true);
-            formData.append('expires_in', 1);
+            const formData = new FormData(); selectedFiles.forEach(f => formData.append('files', f));
+            formData.append('is_public', true); formData.append('expires_in', 1);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
-
             showMessage("Erstelle Freigabe...");
             try {
-                const res = await fetch('/api/upload', { method: 'POST', body: formData });
-                const data = await res.json();
+                const res = await fetch('/api/upload', { method: 'POST', body: formData }); const data = await res.json();
                 if (res.ok) {
                     const fullUrl = `${window.location.origin}/?token=${data.access_token}`;
                     document.getElementById('share-url-display').value = fullUrl;
-                    document.getElementById('qrcode').innerHTML = '';
-                    new QRCode(document.getElementById('qrcode'), { text: fullUrl, width: 140, height: 140 });
-                    document.getElementById('qr-result-container').classList.remove('hidden');
-                    closeModal();
-                    clearFiles();
+                    document.getElementById('qrcode').innerHTML = ''; new QRCode(document.getElementById('qrcode'), { text: fullUrl, width: 120, height: 120 });
+                    document.getElementById('qr-result-container').classList.remove('hidden'); closeModal(); clearFiles();
                 }
             } catch (e) { showMessage("Fehler!"); }
         }
 
         async function refreshActivity() {
-            let url = '/api/discover';
-            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-            const res = await fetch(url);
-            const shares = await res.json();
-
-            // 1. Incoming Directed Drops
+            let url = '/api/discover'; if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            const res = await fetch(url); const shares = await res.json();
             const incoming = shares.filter(s => s.target_peer_id === myId);
-            const incContainer = document.getElementById('incoming-container');
-            const incBadge = document.getElementById('inc-badge');
-
+            const incContainer = document.getElementById('incoming-container'); const incBadge = document.getElementById('inc-badge');
             if (incoming.length > 0) {
-                incBadge.classList.remove('hidden');
-                incContainer.innerHTML = '';
+                incBadge.classList.remove('hidden'); incContainer.innerHTML = '';
                 incoming.forEach(s => {
-                    const div = document.createElement('div');
-                    div.className = 'm3-card p-6 border border-white shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4';
-                    div.innerHTML = `
-                        <div class="flex items-center gap-4">
-                            <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600">
-                                <i data-lucide="smartphone" class="w-7 h-7"></i>
-                            </div>
-                            <div>
-                                <p class="font-bold">${s.uploader_name || 'Unbekannt'}</p>
-                                <p class="text-sm text-gray-600">möchte ${s.files.length} Datei(en) teilen</p>
-                            </div>
-                        </div>
-                        <div class="flex gap-2 w-full sm:w-auto">
-                            <button onclick="handleBundleDownload('${s.id}', '${s.access_token || ''}')" class="flex-1 sm:flex-none px-6 py-2 bg-purple-600 text-white rounded-full font-bold text-sm">Annehmen</button>
-                        </div>
-                    `;
+                    const div = document.createElement('div'); div.className = 'm3-card p-6 border shadow-sm flex items-center justify-between gap-4';
+                    div.innerHTML = `<div class="flex items-center gap-4"><div class="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600"><i data-lucide="smartphone" class="w-6 h-6"></i></div>
+                        <div><p class="font-bold">${s.uploader_name || 'Unbekannt'}</p><p class="text-xs text-gray-600">${s.files.length} Datei(en)</p></div></div>
+                        <button onclick="handleBundleDownload('${s.id}', '${s.access_token || ''}')" class="px-6 py-2 bg-purple-600 text-white rounded-full font-bold text-xs">Annehmen</button>`;
                     incContainer.appendChild(div);
-                });
-                lucide.createIcons();
-            } else {
-                incBadge.classList.add('hidden');
-                incContainer.innerHTML = '<p class="text-center text-gray-400 py-12">Aktuell keine aktiven Anfragen.</p>';
-            }
-
-            // 2. My Shares
-            const myShares = shares.filter(s => s.uploader_name === myName);
-            const mySharesList = document.getElementById('my-shares-list');
+                }); lucide.createIcons();
+            } else { incBadge.classList.add('hidden'); incContainer.innerHTML = '<p class="text-center text-gray-400 py-12 text-xs">Keine Anfragen.</p>'; }
+            const myShares = shares.filter(s => s.uploader_name === myName); const mySharesList = document.getElementById('my-shares-list');
             if (myShares.length > 0) {
                 mySharesList.innerHTML = '';
                 myShares.forEach(s => {
-                    const target = s.target_peer_id ? `Direkt-Drop` : `Global Link`;
-                    const item = document.createElement('div');
-                    item.className = 'flex items-center justify-between p-4 bg-white/60 rounded-3xl border border-gray-100';
-                    item.innerHTML = `
-                        <div class="flex items-center gap-4">
-                            <div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i data-lucide="arrow-up-right" class="w-5 h-5"></i></div>
-                            <div>
-                                <p class="text-sm font-bold">${s.files.length} Datei(en)</p>
-                                <p class="text-[10px] text-gray-400">${target} • ${timeAgo(s.timestamp)}</p>
-                            </div>
-                        </div>
-                        <span class="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full uppercase">AKTIV</span>
-                    `;
+                    const item = document.createElement('div'); item.className = 'flex items-center justify-between p-4 bg-white rounded-3xl border';
+                    item.innerHTML = `<div class="flex items-center gap-4"><div class="p-2 bg-purple-50 rounded-xl text-purple-600"><i data-lucide="arrow-up-right" class="w-5 h-5"></i></div>
+                        <div><p class="text-xs font-bold">${s.files.length} Datei(en)</p><p class="text-[9px] text-gray-400">${timeAgo(s.timestamp)}</p></div></div>
+                        <span class="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full uppercase">AKTIV</span>`;
                     mySharesList.appendChild(item);
-                });
-                lucide.createIcons();
-            } else {
-                mySharesList.innerHTML = '<p class="text-center text-gray-400 py-12">Keine aktiven Freigaben gefunden.</p>';
-            }
-
-            // 3. Discovery (local network/global)
+                }); lucide.createIcons();
+            } else { mySharesList.innerHTML = '<p class="text-center text-gray-400 py-12 text-xs">Keine aktiven Freigaben.</p>'; }
             const others = shares.filter(s => !s.target_peer_id && s.uploader_name !== myName);
             const nearbyList = document.getElementById('nearby-list');
             if (others.length > 0) {
                 nearbyList.innerHTML = '';
                 others.forEach(bundle => {
-                    const div = document.createElement('div');
-                    div.className = 'm3-card p-6 flex items-center justify-between';
-                    div.innerHTML = `
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-700">
-                                <i data-lucide="package" class="w-6 h-6"></i>
-                            </div>
-                            <div>
-                                <p class="font-bold">Share von ${bundle.uploader_ip}</p>
-                                <p class="text-xs text-gray-500">${bundle.files.length} Datei(en) • ${timeAgo(bundle.timestamp)}</p>
-                            </div>
-                        </div>
-                        <button onclick="handleBundleDownload('${bundle.id}', '${bundle.access_token || ''}')" class="p-3 bg-white rounded-full text-purple-600 shadow-sm"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
-                    `;
+                    const div = document.createElement('div'); div.className = 'm3-card p-4 flex items-center justify-between';
+                    div.innerHTML = `<div class="flex items-center gap-4"><div class="w-10 h-10 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-700"><i data-lucide="package" class="w-5 h-5"></i></div>
+                        <div><p class="text-xs font-bold font-bold">Share von ${bundle.uploader_ip}</p><p class="text-[9px] text-gray-500">${bundle.files.length} Datei(en) • ${timeAgo(bundle.timestamp)}</p></div></div>
+                        <button onclick="handleBundleDownload('${bundle.id}', '${bundle.access_token || ''}')" class="p-2 bg-white rounded-full text-purple-600"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>`;
                     nearbyList.appendChild(div);
-                });
-                lucide.createIcons();
-            } else {
-                nearbyList.innerHTML = '<p class="opacity-0.7 text-center py-4 text-xs">Aktuell keine Dateien im Netzwerk.</p>';
-            }
+                }); lucide.createIcons();
+            } else { nearbyList.innerHTML = '<p class="opacity-0.6 text-center py-4 text-[10px]">Keine Dateien im Netzwerk.</p>'; }
         }
 
-        async function handlePublicToken(token) {
-            const res = await fetch(`/api/p/${token}`);
-            if (res.ok) {
-                const bundle = await res.json();
-                showBundlePreview(bundle);
-            }
-        }
-
-        function handleBundleDownload(id, token) {
-            // Need to fetch full bundle meta to show specific files
-            fetch(token ? `/api/p/${token}` : `/api/discover`).then(r => r.json()).then(data => {
-                const bundle = Array.isArray(data) ? data.find(b => b.id === id) : data;
-                if (bundle) showBundlePreview(bundle);
-            });
-        }
-
+        async function handlePublicToken(token) { const res = await fetch(`/api/p/${token}`); if (res.ok) { const bundle = await res.json(); showBundlePreview(bundle); } }
+        function handleBundleDownload(id, token) { fetch(token ? `/api/p/${token}` : `/api/discover`).then(r => r.json()).then(data => { const bundle = Array.isArray(data) ? data.find(b => b.id === id) : data; if (bundle) showBundlePreview(bundle); }); }
         function showBundlePreview(bundle) {
-            const container = document.getElementById('nearby-list');
-            // Re-using the preview system for bundles
-            const modal = document.getElementById('preview-modal');
-            const content = document.getElementById('preview-content');
-            const fileName = document.getElementById('preview-file-name');
-            const fileMeta = document.getElementById('preview-file-meta');
+            const modal = document.getElementById('preview-modal'); const content = document.getElementById('preview-content');
+            const fileName = document.getElementById('preview-file-name'); const fileMeta = document.getElementById('preview-file-meta');
             const dlBtn = document.getElementById('preview-download-btn');
-
-            fileName.innerText = "Bundle Vorschau";
-            fileMeta.innerText = `${bundle.files.length} Datei(en)`;
-            dlBtn.style.display = 'none';
-
-            content.innerHTML = `
-                <div class="w-full max-w-lg space-y-4">
-                    ${bundle.files.map(f => {
-                let dlUrl = `/api/download/${f.id}`;
-                if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-                return `
-                        <div class="bg-white p-6 rounded-3xl border border-purple-50 shadow-sm flex items-center justify-between">
-                            <div class="flex items-center gap-4">
-                                <div class="p-3 bg-purple-50 rounded-2xl text-purple-600"><i data-lucide="file" class="w-6 h-6"></i></div>
-                                <div>
-                                    <p class="font-bold">${f.filename}</p>
-                                    <p class="text-xs text-gray-500">${(f.size / 1024).toFixed(1)} KB</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-2">
-                                <button onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')" class="px-4 py-2 bg-purple-50 text-purple-600 rounded-xl font-bold text-xs">Vorschau</button>
-                                <button onclick="window.open('${dlUrl}')" class="px-4 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs">Get</button>
-                            </div>
-                        </div>`;
-            }).join('')}
-                </div>
-            `;
-            modal.classList.remove('hidden');
-            lucide.createIcons();
+            fileName.innerText = "Bundle Vorschau"; fileMeta.innerText = `${bundle.files.length} Datei(en)`; dlBtn.style.display = 'none';
+            content.innerHTML = `<div class="w-full max-w-lg space-y-4">${bundle.files.map(f => {
+                let dlUrl = `/api/download/${f.id}`; if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                return `<div class="bg-white p-4 rounded-3xl border shadow-sm flex items-center justify-between"><div class="flex items-center gap-4">
+                        <div class="p-3 bg-purple-50 rounded-2xl text-purple-600"><i data-lucide="file" class="w-5 h-5"></i></div>
+                        <div><p class="text-xs font-bold">${f.filename}</p><p class="text-[10px] text-gray-500">${(f.size / 1024).toFixed(1)} KB</p></div></div>
+                        <div class="flex gap-2"><button onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')" class="px-3 py-1 bg-purple-50 text-purple-600 rounded-xl font-bold text-xs">Vorschau</button>
+                        <button onclick="window.open('${dlUrl}')" class="px-3 py-1 bg-purple-600 text-white rounded-xl font-bold text-xs">Get</button></div></div>`;
+            }).join('')}</div>`;
+            modal.classList.remove('hidden'); lucide.createIcons();
         }
-
         function previewFile(id, name, type) {
-            const content = document.getElementById('preview-content');
-            const fileName = document.getElementById('preview-file-name');
-            const fileMeta = document.getElementById('preview-file-meta');
-            const dlBtn = document.getElementById('preview-download-btn');
-
-            fileName.innerText = name;
-            fileMeta.innerText = type;
-            dlBtn.style.display = 'block';
-            content.innerHTML = '<p class="text-purple-600 font-bold animate-pulse">Lade Vorschau...</p>';
-
-            let dlUrl = `/api/download/${id}`;
-            if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            const content = document.getElementById('preview-content'); const fileName = document.getElementById('preview-file-name');
+            const fileMeta = document.getElementById('preview-file-meta'); const dlBtn = document.getElementById('preview-download-btn');
+            fileName.innerText = name; fileMeta.innerText = type; dlBtn.style.display = 'block'; content.innerHTML = '<p class="text-purple-600 font-bold animate-pulse">Lade...</p>';
+            let dlUrl = `/api/download/${id}`; if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
             dlBtn.onclick = () => window.open(dlUrl);
-
-            if (type.startsWith('image/')) {
-                content.innerHTML = `<img src="${dlUrl}" class="max-w-full max-h-[70vh] rounded-2xl shadow-lg border-4 border-white">`;
-            } else if (type.startsWith('video/')) {
-                content.innerHTML = `<video src="${dlUrl}" controls class="max-w-full max-h-[70vh] rounded-2xl shadow-lg"></video>`;
-            } else if (type === 'application/pdf') {
-                content.innerHTML = `<iframe src="${dlUrl}" class="w-full aspect-square md:w-[600px] md:h-[600px] border-none rounded-2xl shadow-inner bg-white"></iframe>`;
-            } else if (type.startsWith('text/') || type.includes('json') || type.includes('javascript')) {
-                fetch(dlUrl).then(r => r.text()).then(txt => {
-                    content.innerHTML = `<pre class="bg-gray-900 text-green-400 p-8 rounded-2xl w-full max-w-2xl overflow-auto text-xs font-mono shadow-2xl">${escapeHtml(txt)}</pre>`;
-                });
-            } else {
-                content.innerHTML = `
-                    <div class="text-center p-12">
-                        <div class="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-6 text-gray-400"><i data-lucide="file-question" class="w-10 h-10"></i></div>
-                        <p class="text-xl font-bold text-gray-800">Keine Live-Vorschau</p>
-                        <p class="text-gray-500 mt-2">Diese Datei kann nur heruntergeladen werden.</p>
-                    </div>`;
-                lucide.createIcons();
-            }
+            if (type.startsWith('image/')) { content.innerHTML = `<img src="${dlUrl}" class="max-w-full max-h-[60vh] rounded-2xl shadow-lg">`; }
+            else if (type.startsWith('video/')) { content.innerHTML = `<video src="${dlUrl}" controls class="max-w-full max-h-[60vh] rounded-2xl shadow-lg"></video>`; }
+            else if (type === 'application/pdf') { content.innerHTML = `<iframe src="${dlUrl}" class="w-full aspect-square md:w-[500px] md:h-[500px] border-none rounded-2xl bg-white"></iframe>`; }
+            else { content.innerHTML = `<div class="text-center p-12"><p class="font-bold">Keine Vorschau.</p></div>`; lucide.createIcons(); }
         }
-
         function closePreview() { document.getElementById('preview-modal').classList.add('hidden'); }
-        function copyShareUrl() { const input = document.getElementById("share-url-display"); input.select(); navigator.clipboard.writeText(input.value); showStatus("Link kopiert!"); }
-        function showMessage(html) { document.getElementById('modal-content').innerHTML = `<div class="py-4 text-center">${html}</div>`; document.getElementById('modal-backdrop').classList.remove('hidden'); lucide.createIcons(); }
+        function copyShareUrl() { const input = document.getElementById("share-url-display"); input.select(); navigator.clipboard.writeText(input.value); showMessage("Link kopiert!"); }
+        function switchView(viewName) {
+            document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active')); document.getElementById('view-' + viewName).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active')); document.getElementById('nav-' + viewName).classList.add('active');
+            document.getElementById('view-title-display').innerText = viewName.toUpperCase(); lucide.createIcons();
+        }
+        function updateUserName(v) { if (v) { myName = v; localStorage.setItem('lara_peer_name', v); document.getElementById('display-user-name').innerText = v; } }
+        function showMessage(h) { document.getElementById('modal-content').innerHTML = h; document.getElementById('modal-backdrop').classList.remove('hidden'); }
         function closeModal() { document.getElementById('modal-backdrop').classList.add('hidden'); }
-        function showStatus(m) { const s = document.getElementById('status'); s.innerText = m; s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 3000); }
-        function timeAgo(t) { const s = Math.floor((Date.now() / 1000) - t); if (s < 60) return 'Gerade eben'; if (s < 3600) return `${Math.floor(s / 60)}m her`; return `${Math.floor(s / 3600)}h her`; }
-        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+        function timeAgo(t) { const s = Math.floor((Date.now() / 1000) - t); if (s < 60) return 'Jetzt'; if (s < 3600) return `${Math.floor(s / 60)}m`; return `${Math.floor(s / 3600)}h`; }
     </script>
 </body>
 
