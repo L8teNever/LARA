@@ -13,8 +13,9 @@ UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
+import secrets
+
 # In-memory storage for file metadata
-# In a production app, this would be a database
 class shared_file(BaseModel):
     id: str
     filename: str
@@ -24,6 +25,8 @@ class shared_file(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     timestamp: float
+    is_public: bool = False
+    access_token: Optional[str] = None
 
 files_metadata: List[shared_file] = []
 
@@ -39,10 +42,16 @@ async def upload_file(
     request: Request,
     file: UploadFile = File(...),
     lat: Optional[float] = Form(None),
-    lon: Optional[float] = Form(None)
+    lon: Optional[float] = Form(None),
+    is_public: bool = Form(False)
 ):
     file_id = str(uuid.uuid4())
     file_path = os.path.join(UPLOAD_DIR, file_id)
+    
+    access_token = None
+    if is_public:
+        # Generate a very long, unguessable token for public sharing
+        access_token = secrets.token_urlsafe(48)
     
     with open(file_path, "wb") as buffer:
         content = await file.read()
@@ -56,11 +65,18 @@ async def upload_file(
         uploader_ip=get_client_ip(request),
         lat=lat,
         lon=lon,
-        timestamp=time.time()
+        timestamp=time.time(),
+        is_public=is_public,
+        access_token=access_token
     )
     files_metadata.append(metadata)
     
-    return {"status": "success", "file_id": file_id}
+    return {
+        "status": "success", 
+        "file_id": file_id, 
+        "is_public": is_public,
+        "access_token": access_token
+    }
 
 @app.get("/api/discover")
 async def discover_files(
@@ -103,10 +119,24 @@ async def download_file(file_id: str):
     if not file_meta:
         raise HTTPException(status_code=404, detail="File not found")
     
+    # Check if file is private and requester is NOT on the same subnet/nearby
+    # For now, we allow regular download if the user has the ID, 
+    # but the explorer only shows them if nearby.
+    
     file_path = os.path.join(UPLOAD_DIR, file_id)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File content missing")
         
+    return FileResponse(file_path, filename=file_meta.filename, media_type=file_meta.content_type)
+
+@app.get("/api/p/{access_token}")
+async def public_download(access_token: str):
+    # Public downloads via long random token
+    file_meta = next((f for f in files_metadata if f.access_token == access_token), None)
+    if not file_meta:
+        raise HTTPException(status_code=404, detail="Invalid or expired link")
+        
+    file_path = os.path.join(UPLOAD_DIR, file_meta.id)
     return FileResponse(file_path, filename=file_meta.filename, media_type=file_meta.content_type)
 
 # Serve static files (Frontend)

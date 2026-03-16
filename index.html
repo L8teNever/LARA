@@ -16,6 +16,7 @@
         }
     </style>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             document.body.style.visibility = "visible";
@@ -37,6 +38,23 @@
                 <div class="icon">📤</div>
                 <p>Drop files here or click to select</p>
                 <input type="file" id="file-input" hidden multiple>
+            </div>
+            <div class="share-options" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                <label class="switch-container" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="public-share" style="width: 20px; height: 20px;">
+                    <span style="font-size: 14px; font-weight: 500;">Create Global Link & QR Code</span>
+                </label>
+            </div>
+            <div id="qr-container" class="file-item"
+                style="margin-top: 16px; display: none; flex-direction: column; gap: 12px; border-style: dashed;">
+                <div style="font-weight: 500; font-size: 14px;">Global Share Active:</div>
+                <div id="qrcode" style="align-self: center; padding: 12px; background: white; border-radius: 12px;">
+                </div>
+                <div style="display: flex; gap: 8px; width: 100%;">
+                    <input type="text" id="share-url" readonly
+                        style="flex: 1; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--md-sys-color-outline); font-size: 12px;">
+                    <button class="btn" onclick="copyShareUrl()" style="padding: 8px 16px;">Copy</button>
+                </div>
             </div>
         </section>
 
@@ -97,9 +115,19 @@
         };
 
         async function handleFiles(files) {
+            const isPublic = document.getElementById('public-share').checked;
+            const qrContainer = document.getElementById('qr-container');
+            const qrcodeEl = document.getElementById('qrcode');
+            const shareUrlInput = document.getElementById('share-url');
+
+            qrContainer.style.display = 'none';
+            qrcodeEl.innerHTML = '';
+
             for (const file of files) {
                 const formData = new FormData();
                 formData.append('file', file);
+                formData.append('is_public', isPublic);
+
                 if (userCoords.lat) {
                     formData.append('lat', userCoords.lat);
                     formData.append('lon', userCoords.lon);
@@ -112,13 +140,37 @@
                         method: 'POST',
                         body: formData
                     });
+                    const data = await res.json();
+
                     if (res.ok) {
                         showStatus(`Shared ${file.name} successfully!`);
+
+                        if (data.is_public && data.access_token) {
+                            const fullUrl = `${window.location.origin}/api/p/${data.access_token}`;
+                            shareUrlInput.value = fullUrl;
+                            new QRCode(qrcodeEl, {
+                                text: fullUrl,
+                                width: 160,
+                                height: 160,
+                                colorDark: "#001e30",
+                                colorLight: "#ffffff",
+                                correctLevel: QRCode.CorrectLevel.H
+                            });
+                            qrContainer.style.display = 'flex';
+                        }
                     }
                 } catch (err) {
                     showStatus("Upload failed!");
                 }
             }
+        }
+
+        function copyShareUrl() {
+            const copyText = document.getElementById("share-url");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value);
+            showStatus("Link copied to clipboard!");
         }
 
         // Discovery Logic
