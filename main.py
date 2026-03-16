@@ -323,10 +323,10 @@ async def cleanup_loop():
 async def startup_event():
     asyncio.create_task(cleanup_loop())
 
-@app.get("/drop", response_class=HTMLResponse)
-async def get_drop():
-    with open("drop.html", "r", encoding="utf-8") as f:
-        return f.read()
+@app.get("/drop")
+async def redirect_drop():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/")
 
 # Serve static files (Frontend)
 app.mount("/static", StaticFiles(directory="."), name="static")
@@ -334,9 +334,7 @@ app.mount("/static", StaticFiles(directory="."), name="static")
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
     with open("index.html", "r", encoding="utf-8") as f:
-        content = f.read()
-        # Ensure CSS path is correct if we changed it, but for now we'll just fix the link in index.html
-        return content
+        return f.read()
 
 if __name__ == "__main__":
     import uvicorn

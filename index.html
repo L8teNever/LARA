@@ -4,36 +4,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LARA - Nearby Drop</title>
+    <title>LARA - Unified Drop</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        /* Fallback / Initial styles to prevent FOUC */
-        body {
-            font-family: 'Outfit', sans-serif;
-            visibility: hidden;
-        }
-    </style>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            document.body.style.visibility = "visible";
-        });
-    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--md-sys-color-on-surface);
+            opacity: 0.6;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-btn.active {
+            opacity: 1;
+            color: var(--md-sys-color-primary);
+            border-bottom-color: var(--md-sys-color-primary);
+        }
+    </style>
 </head>
 
 <body>
+    <!-- Name Setup Modal -->
+    <div id="name-modal" class="name-setup" style="display: none;">
+        <div class="logo" style="margin-bottom: 20px; font-size: 40px;">LARA <span>Drop</span></div>
+        <h2 style="margin-bottom: 8px;">Welcome!</h2>
+        <p style="opacity: 0.7; margin-bottom: 24px; text-align: center;">Choose a name so others can find you nearby.
+        </p>
+        <input type="text" id="user-name-input" placeholder="Your Name" class="card"
+            style="width: 100%; max-width: 320px; padding: 16px; border: 2px solid var(--md-sys-color-primary); outline: none; font-size: 18px; background: white; color: black;">
+        <button class="btn" onclick="saveName()"
+            style="margin-top: 24px; width: 100%; max-width: 320px; justify-content: center;">Start Sharing</button>
+    </div>
+
     <header>
-        <h1>LARA</h1>
         <div class="logo">LARA <span>Drop</span></div>
-        <nav style="display: flex; gap: 20px;">
-            <a href="/" style="text-decoration: none; color: var(--md-sys-color-primary); font-weight: 600;">Home</a>
-            <a href="/drop"
-                style="text-decoration: none; color: var(--md-sys-color-on-surface); opacity: 0.7; font-weight: 600;">AirDrop
-                Mode</a>
-        </nav>
+        <div id="my-name-display" style="font-size: 14px; opacity: 0.8; font-weight: 500;"></div>
     </header>
 
     <main class="main-container">
@@ -46,329 +63,437 @@
                     style="position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.5); color: white; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; z-index: 10;">✕</button>
                 <div id="preview-content"
                     style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: auto; min-height: 200px;">
-                    <!-- Preview content loaded here -->
                 </div>
             </div>
         </div>
 
-        <!-- Upload Section -->
+        <!-- 1. Drop Zone / Selection -->
         <section class="card">
-            <h2 class="section-title">Send Files</h2>
-            <div class="drop-zone" id="drop-zone">
-                <div class="icon">📤</div>
-                <p>Drop files here or click to select</p>
+            <h2 class="section-title">Step 1: Select Files</h2>
+            <div id="drop-zone" class="drop-zone"
+                style="transition: all 0.3s ease; cursor: default; border-style: solid; min-height: 160px;">
+                <div id="drop-zone-content" onclick="document.getElementById('file-input').click()"
+                    style="cursor: pointer; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <div class="icon">📥</div>
+                    <p>Drop files or click to add</p>
+                </div>
+                <div id="selected-files-list" style="display: none; width: 100%; text-align: left; padding: 10px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-weight: 600; font-size: 14px; color: var(--md-sys-color-primary);">Selected
+                            Files:</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn" style="padding: 4px 10px; font-size: 11px;"
+                                onclick="document.getElementById('file-input').click()">+ Add</button>
+                            <button class="btn"
+                                style="padding: 4px 10px; font-size: 11px; background: var(--md-sys-color-error); color: white;"
+                                onclick="clearSelection()">Clear</button>
+                        </div>
+                    </div>
+                    <ul id="file-names"
+                        style="font-size: 12px; opacity: 0.9; list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px;">
+                    </ul>
+                </div>
                 <input type="file" id="file-input" hidden multiple>
             </div>
-            <div class="share-options" style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px;">
-                <label class="switch-container" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="public-share" style="width: 20px; height: 20px;">
-                    <span style="font-size: 14px; font-weight: 500;">Create Global Link & QR Code</span>
-                </label>
+        </section>
 
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 14px; opacity: 0.8;">Expire in:</span>
-                    <select id="expires-in"
-                        style="background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); border: 1px solid var(--md-sys-color-outline); border-radius: 8px; padding: 4px 8px; font-size: 14px;">
-                        <option value="1" selected>1 Hour (Default)</option>
-                        <option value="5">5 Hours</option>
-                        <option value="24">24 Hours</option>
-                    </select>
+        <!-- 2. Share Options / Peers -->
+        <section class="card" style="background-color: var(--md-sys-color-surface-variant);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h2 class="section-title" style="margin-bottom: 0;">Step 2: Share With</h2>
+                <div style="display: flex; gap: 4px;">
+                    <button class="tab-btn active" id="tab-drop" onclick="switchMode('drop')">Drop</button>
+                    <button class="tab-btn" id="tab-global" onclick="switchMode('global')">Global Link</button>
                 </div>
             </div>
+
+            <div id="mode-drop">
+                <div id="peer-list" class="peer-grid"></div>
+                <p id="no-peers" style="text-align: center; padding: 20px; opacity: 0.5; font-size: 14px;">No one nearby
+                    found yet. Make sure others are on this page.</p>
+            </div>
+
+            <div id="mode-global" style="display: none;">
+                <div class="share-options" style="display: flex; flex-direction: column; gap: 12px;">
+                    <p style="font-size: 14px; opacity: 0.8;">Generate a long URL and QR code to share with anyone,
+                        anywhere.</p>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 14px; opacity: 0.8;">Expire in:</span>
+                        <select id="expires-in"
+                            style="background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); border: 1px solid var(--md-sys-color-outline); border-radius: 8px; padding: 4px 8px; font-size: 14px;">
+                            <option value="1" selected>1 Hour</option>
+                            <option value="5">5 Hours</option>
+                            <option value="24">24 Hours</option>
+                        </select>
+                    </div>
+                    <button class="btn" onclick="startGlobalShare()"
+                        style="width: 100%; justify-content: center; margin-top: 8px;">Create Global Link</button>
+                </div>
+            </div>
+
+            <!-- Global Result Area -->
             <div id="qr-container" class="file-item"
-                style="margin-top: 16px; display: none; flex-direction: column; gap: 12px; border-style: dashed;">
-                <div style="font-weight: 500; font-size: 14px;">Global Share Active:</div>
+                style="margin-top: 20px; display: none; flex-direction: column; gap: 12px; border-style: dashed; background: white;">
+                <div style="font-weight: 500; font-size: 14px; color: black;">Global Share Ready:</div>
                 <div id="qrcode" style="align-self: center; padding: 12px; background: white; border-radius: 12px;">
                 </div>
                 <div style="display: flex; gap: 8px; width: 100%;">
                     <input type="text" id="share-url" readonly
-                        style="flex: 1; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--md-sys-color-outline); font-size: 12px;">
+                        style="flex: 1; padding: 8px 12px; border-radius: 12px; border: 1px solid #ccc; font-size: 12px; background: #eee; color: #333;">
                     <button class="btn" onclick="copyShareUrl()" style="padding: 8px 16px;">Copy</button>
                 </div>
             </div>
         </section>
 
-        <!-- Discovery Section -->
-        <section class="card"
-            style="background-color: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);">
-            <h2 class="section-title">Nearby Files</h2>
-            <div class="nearby-list" id="nearby-list">
-                <!-- Nearby files will appear here -->
-                <p style="opacity: 0.7; text-align: center; padding: 20px;">Watching for files in your vicinity...</p>
-            </div>
-        </section>
+        <!-- 3. Active / Incoming Section -->
+        <div id="activity-sections">
+            <!-- Incoming Drops (Targeted) -->
+            <div id="incoming-container"></div>
+
+            <!-- My Active Shares (Both Global and Directed) -->
+            <section class="card" id="my-shares-section" style="margin-top: 24px; display: none;">
+                <h2 class="section-title">My Active Shares</h2>
+                <div id="my-shares-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+            </section>
+
+            <!-- Public Nearby Shares (Discovery) -->
+            <section class="card" id="public-discovery-section" style="margin-top: 24px;">
+                <h2 class="section-title">Network Shares</h2>
+                <div class="nearby-list" id="nearby-list">
+                    <p style="opacity: 0.7; text-align: center; padding: 20px;">Scanning for local network files...</p>
+                </div>
+            </section>
+        </div>
     </main>
 
     <div id="status"></div>
 
     <script>
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const nearbyList = document.getElementById('nearby-list');
-        const statusEl = document.getElementById('status');
-
+        let myId = localStorage.getItem('lara_peer_id') || Math.random().toString(36).substring(2, 15);
+        let myName = localStorage.getItem('lara_peer_name');
+        let selectedFiles = [];
         let userCoords = { lat: null, lon: null };
+        let activeMode = 'drop';
 
-        // Get Location
-        if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(pos => {
-                userCoords.lat = pos.coords.latitude;
-                userCoords.lon = pos.coords.longitude;
-                showStatus("Location pinned for proximity sharing");
-            }, err => {
-                console.warn("Location denied, falling back to network discovery only");
-            });
-        }
+        localStorage.setItem('lara_peer_id', myId);
 
-        // Check for public token in URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const publicToken = urlParams.get('token');
-        if (publicToken) {
-            handlePublicLink(publicToken);
-        }
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!myName) {
+                document.getElementById('name-modal').style.display = 'flex';
+            } else {
+                initApp();
+            }
+        });
 
-        async function handlePublicLink(token) {
-            try {
-                const res = await fetch(`/api/p/${token}`);
-                if (!res.ok) throw new Error("Link expired or invalid");
-                const bundle = await res.json();
-
-                // Show only this bundle in the list
-                nearbyList.innerHTML = '<h3 style="font-size: 16px; margin-bottom: 12px;">Public Shared Files:</h3>';
-                renderBundle(bundle);
-                // Stop regular discovery polling
-                window.isPublicMode = true;
-            } catch (err) {
-                showStatus(err.message);
+        function saveName() {
+            const val = document.getElementById('user-name-input').value.trim();
+            if (val) {
+                localStorage.setItem('lara_peer_name', val);
+                myName = val;
+                document.getElementById('name-modal').style.display = 'none';
+                initApp();
             }
         }
 
-        function renderBundle(bundle, isExpanded = true) {
-            const div = document.createElement('div');
-            div.className = 'card';
-            div.style.backgroundColor = 'var(--md-sys-color-surface)';
-            div.style.color = 'var(--md-sys-color-on-surface)';
-            div.style.padding = '16px';
-            div.style.marginBottom = '8px';
+        function initApp() {
+            document.getElementById('my-name-display').innerText = `Active as: ${myName}`;
 
-            const totalSize = (bundle.files.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(1) + ' MB';
-            const fileCount = bundle.files.length;
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userCoords.lat = pos.coords.latitude;
+                    userCoords.lon = pos.coords.longitude;
+                });
+            }
+
+            // Register/Heartbeat
+            setInterval(registerMe, 5000);
+            registerMe();
+
+            // Discover People
+            setInterval(fetchPeers, 3000);
+            fetchPeers();
+
+            // Discover Files & Activity
+            setInterval(refreshActivity, 4000);
+            refreshActivity();
+
+            // File selection listener
+            document.getElementById('file-input').addEventListener('change', function (e) {
+                const newFiles = Array.from(e.target.files);
+                if (newFiles.length > 0) {
+                    newFiles.forEach(nf => {
+                        if (!selectedFiles.some(f => f.name === nf.name && f.size === nf.size)) {
+                            selectedFiles.push(nf);
+                        }
+                    });
+                    updateFileUI();
+                }
+                e.target.value = '';
+            });
+
+            // Handle public link in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            if (token) handlePublicToken(token);
+        }
+
+        function switchMode(mode) {
+            activeMode = mode;
+            document.getElementById('tab-drop').classList.toggle('active', mode === 'drop');
+            document.getElementById('tab-global').classList.toggle('active', mode === 'global');
+            document.getElementById('mode-drop').style.display = mode === 'drop' ? 'block' : 'none';
+            document.getElementById('mode-global').style.display = mode === 'global' ? 'block' : 'none';
+            if (mode === 'drop') document.getElementById('qr-container').style.display = 'none';
+        }
+
+        function updateFileUI() {
+            const content = document.getElementById('drop-zone-content');
+            const list = document.getElementById('selected-files-list');
+            const namesUl = document.getElementById('file-names');
+            const dropZone = document.getElementById('drop-zone');
+
+            if (selectedFiles.length > 0) {
+                content.style.display = 'none';
+                list.style.display = 'block';
+                namesUl.innerHTML = '';
+                selectedFiles.forEach((f, index) => {
+                    const li = document.createElement('li');
+                    li.style.display = 'flex'; li.style.justifyContent = 'space-between'; li.style.alignItems = 'center';
+                    li.style.padding = '6px 10px'; li.style.background = 'rgba(0,0,0,0.05)'; li.style.borderRadius = '10px';
+                    li.innerHTML = `
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;">
+                            • ${f.name} <span style="opacity: 0.6; font-size: 10px;">(${(f.size / 1024).toFixed(1)} KB)</span>
+                        </span>
+                        <button onclick="removeFile(${index})" style="background: none; border: none; color: var(--md-sys-color-error); cursor: pointer; font-size: 16px;">✕</button>
+                    `;
+                    namesUl.appendChild(li);
+                });
+                dropZone.style.borderColor = 'var(--md-sys-color-primary)';
+                dropZone.style.background = 'var(--md-sys-color-primary-container)';
+            } else {
+                content.style.display = 'flex';
+                list.style.display = 'none';
+                dropZone.style.borderColor = '';
+                dropZone.style.background = '';
+            }
+        }
+
+        function removeFile(index) { selectedFiles.splice(index, 1); updateFileUI(); }
+        function clearSelection() { selectedFiles = []; updateFileUI(); }
+
+        async function registerMe() {
+            await fetch('/api/peers/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, last_seen: 0 })
+            });
+        }
+
+        async function fetchPeers() {
+            let url = '/api/peers/discover';
+            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            const res = await fetch(url);
+            const peers = await res.json();
+            const list = document.getElementById('peer-list');
+            const noPeers = document.getElementById('no-peers');
+            const others = peers.filter(p => p.id !== myId);
+
+            list.innerHTML = '';
+            if (others.length === 0) { noPeers.style.display = 'block'; }
+            else {
+                noPeers.style.display = 'none';
+                others.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'peer-item';
+                    item.onclick = () => startDrop(p);
+                    item.innerHTML = `
+                        <div class="peer-avatar">${p.name[0].toUpperCase()}</div>
+                        <div class="peer-name">${p.name}</div>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+        }
+
+        async function startDrop(target) {
+            if (selectedFiles.length === 0) { alert("Select files first!"); return; }
+            const formData = new FormData();
+            selectedFiles.forEach(f => formData.append('files', f));
+            formData.append('target_peer_id', target.id);
+            formData.append('uploader_name', myName);
+            if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
+
+            showStatus(`Dropping to ${target.name}...`);
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                if (res.ok) { showStatus("Dropped successfully!"); clearSelection(); refreshActivity(); }
+                else showStatus("Drop failed!");
+            } catch (e) { showStatus("Error!"); }
+        }
+
+        async function startGlobalShare() {
+            if (selectedFiles.length === 0) { alert("Select files first!"); return; }
+            const formData = new FormData();
+            selectedFiles.forEach(f => formData.append('files', f));
+            formData.append('is_public', true);
+            formData.append('expires_in', document.getElementById('expires-in').value);
+            if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
+
+            showStatus("Generating global link...");
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (res.ok) {
+                    showStatus("Global link ready!");
+                    displayGlobalResult(data.access_token);
+                    clearSelection();
+                    refreshActivity();
+                }
+            } catch (e) { showStatus("Error!"); }
+        }
+
+        function displayGlobalResult(token) {
+            const container = document.getElementById('qr-container');
+            const qrcodeEl = document.getElementById('qrcode');
+            const shareUrlInput = document.getElementById('share-url');
+            const fullUrl = `${window.location.origin}/?token=${token}`;
+
+            qrcodeEl.innerHTML = '';
+            new QRCode(qrcodeEl, { text: fullUrl, width: 160, height: 160, colorDark: "#000", colorLight: "#fff", correctLevel: QRCode.CorrectLevel.H });
+            shareUrlInput.value = fullUrl;
+            container.style.display = 'flex';
+        }
+
+        async function refreshActivity() {
+            let url = '/api/discover';
+            if (userCoords.lat) url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            const res = await fetch(url);
+            const shares = await res.json();
+
+            // 1. Incoming Directed Drops
+            const incoming = shares.filter(s => s.target_peer_id === myId);
+            const incContainer = document.getElementById('incoming-container');
+            if (incoming.length > 0) {
+                incContainer.innerHTML = '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--md-sys-color-primary)">Incoming Drops</h3>';
+                incoming.forEach(s => {
+                    const div = document.createElement('div');
+                    div.className = 'card'; div.style.marginBottom = '12px'; div.style.border = '2px solid var(--md-sys-color-primary)';
+                    div.innerHTML = `
+                        <div style="font-weight: 600; margin-bottom: 4px;">Shared from ${s.uploader_name || 'Someone'}</div>
+                        <div style="font-size: 12px; opacity: 0.7; margin-bottom: 12px;">${s.files.length} file(s) available</div>
+                        <button class="btn" style="padding: 8px 16px; font-size: 14px;" onclick="viewBundle('${s.id}', true)">View & Download</button>
+                    `;
+                    incContainer.appendChild(div);
+                });
+            } else { incContainer.innerHTML = ''; }
+
+            // 2. My Active Shares
+            const myShares = shares.filter(s => s.uploader_name === myName);
+            const mySharesList = document.getElementById('my-shares-list');
+            const mySharesSection = document.getElementById('my-shares-section');
+            if (myShares.length > 0) {
+                mySharesSection.style.display = 'block';
+                mySharesList.innerHTML = '';
+                myShares.forEach(s => {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    const target = s.target_peer_id ? `Drop to Peer` : `Global Link`;
+                    item.innerHTML = `
+                        <div class="file-info">
+                            <span class="file-name" style="font-weight: 600;">${target}</span>
+                            <span class="file-meta">${s.files.length} file(s) • ${timeAgo(s.timestamp)}</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--md-sys-color-primary); font-weight: 600;">ACTIVE</div>
+                    `;
+                    mySharesList.appendChild(item);
+                });
+            } else { mySharesSection.style.display = 'none'; }
+
+            // 3. Network Discovery
+            const others = shares.filter(s => !s.target_peer_id && s.uploader_name !== myName);
+            const nearbyList = document.getElementById('nearby-list');
+            if (others.length === 0) { nearbyList.innerHTML = '<p style="opacity: 0.6; text-align: center; padding: 20px;">No public files nearby.</p>'; }
+            else {
+                nearbyList.innerHTML = '';
+                others.forEach(bundle => { renderBundleUI(bundle, nearbyList); });
+            }
+        }
+
+        async function handlePublicToken(token) {
+            const res = await fetch(`/api/p/${token}`);
+            if (res.ok) {
+                const bundle = await res.json();
+                const nearbyList = document.getElementById('nearby-list');
+                nearbyList.innerHTML = '<h3 style="font-size: 16px; margin-bottom: 12px;">Public Share Contents:</h3>';
+                renderBundleUI(bundle, nearbyList, true);
+                window.isPublicMode = true;
+            }
+        }
+
+        function renderBundleUI(bundle, container, isExpanded = false) {
+            const div = document.createElement('div');
+            div.className = 'card'; div.style.backgroundColor = 'var(--md-sys-color-surface)'; div.style.padding = '16px'; div.style.marginBottom = '8px';
+            const size = (bundle.files.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(1) + ' MB';
             const display = isExpanded ? 'flex' : 'none';
             const icon = isExpanded ? '➖' : '➕';
-            const timeAgoStr = timeAgo(bundle.timestamp);
 
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleBundle('${bundle.id}')">
                     <div class="file-info">
                         <span class="file-name" style="font-weight: 600;">📦 Share from ${bundle.uploader_ip}</span>
-                        <span class="file-meta">${fileCount} file(s) • ${totalSize} • ${timeAgoStr}</span>
+                        <span class="file-meta">${bundle.files.length} file(s) • ${size} • ${timeAgo(bundle.timestamp)}</span>
                     </div>
                     <div style="font-size: 20px;" id="icon-${bundle.id}">${icon}</div>
                 </div>
                 <div id="bundle-${bundle.id}" style="display: ${display}; margin-top: 16px; border-top: 1px solid var(--md-sys-color-outline); padding-top: 12px; flex-direction: column; gap: 8px;">
                     ${bundle.files.map(f => {
-                let downloadUrl = `/api/download/${f.id}`;
-                if (userCoords.lat) downloadUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                let dl = `/api/download/${f.id}`;
+                if (userCoords.lat) dl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
                 return `
-                                    <div class="file-item" style="border: none; background: rgba(0,0,0,0.03); padding: 10px 16px;">
-                                        <div class="file-info">
-                                            <span class="file-name" style="font-size: 14px;">${f.filename}</span>
-                                            <span class="file-meta">${(f.size / 1024).toFixed(1)} KB</span>
-                                        </div>
-                                        <div style="display: flex; gap: 8px;">
-                                            <button class="btn" style="padding: 6px 12px; font-size: 12px; background: var(--md-sys-color-secondary);" onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')">Preview</button>
-                                            <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="window.open('${downloadUrl}')">Download</button>
-                                        </div>
-                                    </div>
-                                `;
+                            <div class="file-item" style="border: none; background: rgba(0,0,0,0.03); padding: 10px 16px;">
+                                <div class="file-info">
+                                    <span class="file-name" style="font-size: 14px;">${f.filename}</span>
+                                    <span class="file-meta">${(f.size / 1024).toFixed(1)} KB</span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn" style="padding: 6px 12px; font-size: 12px; background: var(--md-sys-color-secondary);" onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')">Preview</button>
+                                    <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="window.open('${dl}')">Get</button>
+                                </div>
+                            </div>`;
             }).join('')}
                 </div>
             `;
-            nearbyList.appendChild(div);
+            container.appendChild(div);
         }
 
-        function showStatus(msg) {
-            statusEl.innerText = msg;
-            statusEl.style.display = 'block';
-            setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+        async function viewBundle(id, expanded = true) {
+            // Find bundle by ID in list and toggle
+            toggleBundle(id, true);
         }
 
-        // Upload Logic
-        dropZone.onclick = () => fileInput.click();
-
-        fileInput.onchange = (e) => handleFiles(e.target.files);
-
-        dropZone.ondragover = (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        };
-
-        dropZone.ondragleave = () => dropZone.classList.remove('dragover');
-
-        dropZone.ondrop = (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            handleFiles(e.dataTransfer.files);
-        };
-
-        async function handleFiles(files) {
-            const isPublic = document.getElementById('public-share').checked;
-            const expiresIn = document.getElementById('expires-in').value;
-            const qrContainer = document.getElementById('qr-container');
-            const qrcodeEl = document.getElementById('qrcode');
-            const shareUrlInput = document.getElementById('share-url');
-
-            qrContainer.style.display = 'none';
-            qrcodeEl.innerHTML = '';
-
-            // Group all selected files into one formData
-            const formData = new FormData();
-            for (const file of files) {
-                formData.append('files', file);
-            }
-            formData.append('is_public', isPublic);
-            formData.append('expires_in', expiresIn);
-
-            if (userCoords.lat) {
-                formData.append('lat', userCoords.lat);
-                formData.append('lon', userCoords.lon);
-            }
-
-            for (const file of [files[0]]) { // Loop once for the whole bundle
-
-                showStatus(`Sending ${file.name}...`);
-
-                try {
-                    const res = await fetch('/api/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await res.json();
-
-                    if (res.ok) {
-                        showStatus(`Shared ${files.length} file(s) successfully!`);
-
-                        if (data.is_public && data.access_token) {
-                            const fullUrl = `${window.location.origin}/?token=${data.access_token}`;
-                            shareUrlInput.value = fullUrl;
-                            new QRCode(qrcodeEl, {
-                                text: fullUrl,
-                                width: 160,
-                                height: 160,
-                                colorDark: "#001e30",
-                                colorLight: "#ffffff",
-                                correctLevel: QRCode.CorrectLevel.H
-                            });
-                            qrContainer.style.display = 'flex';
-                        }
-                    } else {
-                        showStatus(`Error: ${data.detail || "Upload failed"}`);
-                    }
-                } catch (err) {
-                    showStatus("Upload failed!");
-                }
-                break; // Standard multipart upload sends all files at once now
-            }
-        }
-
-        function copyShareUrl() {
-            const copyText = document.getElementById("share-url");
-            copyText.select();
-            copyText.setSelectionRange(0, 99999);
-            navigator.clipboard.writeText(copyText.value);
-            showStatus("Link copied to clipboard!");
-        }
-
-        // Discovery Logic
-        async function fetchNearby() {
-            if (window.isPublicMode) return;
-            let url = '/api/discover';
-            if (userCoords.lat) {
-                url += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-            }
-
-            try {
-                const res = await fetch(url);
-                const files = await res.json();
-
-                if (files.length === 0) {
-                    nearbyList.innerHTML = '<p style="opacity: 0.7; text-align: center; padding: 20px;">No shares found nearby right now.</p>';
-                    return;
-                }
-
-                nearbyList.innerHTML = '';
-                files.forEach(bundle => {
-                    renderBundle(bundle, false); // Render as collapsed
-                });
-            } catch (err) {
-                console.error("Discovery error", err);
-            }
-        }
-
-        function toggleBundle(id) {
+        function toggleBundle(id, forceOpen = false) {
             const el = document.getElementById(`bundle-${id}`);
             const icon = document.getElementById(`icon-${id}`);
-            if (el.style.display === 'none') {
-                el.style.display = 'flex';
-                icon.innerText = '➖';
-            } else {
-                el.style.display = 'none';
-                icon.innerText = '➕';
-            }
-        }
-
-        function timeAgo(timestamp) {
-            const seconds = Math.floor((new Date() - new Date(timestamp * 1000)) / 1000);
-            if (seconds < 60) return 'just now';
-            const minutes = Math.floor(seconds / 60);
-            if (minutes < 60) return `${minutes}m ago`;
-            const hours = Math.floor(minutes / 60);
-            if (hours < 24) return `${hours}h ago`;
-            return 'long ago';
+            if (!el) return;
+            if (el.style.display === 'none' || forceOpen) { el.style.display = 'flex'; icon.innerText = '➖'; }
+            else { el.style.display = 'none'; icon.innerText = '➕'; }
         }
 
         function previewFile(id, name, type) {
             const modal = document.getElementById('preview-modal');
             const content = document.getElementById('preview-content');
-            content.innerHTML = '<p style="color: var(--md-sys-color-on-surface)">Loading preview...</p>';
-            modal.style.display = 'flex';
-
-            let downloadUrl = `/api/download/${id}`;
-            if (userCoords.lat) downloadUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-
-            if (type.startsWith('image/')) {
-                content.innerHTML = `<img src="${downloadUrl}" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 12px;">`;
-            } else if (type.startsWith('video/')) {
-                content.innerHTML = `<video src="${downloadUrl}" controls style="max-width: 100%; max-height: 80vh; border-radius: 12px;"></video>`;
-            } else if (type === 'application/pdf') {
-                content.innerHTML = `<iframe src="${downloadUrl}" style="width: 80vw; height: 80vh; border: none; border-radius: 12px;"></iframe>`;
-            } else if (type.startsWith('text/') || type.includes('javascript') || type.includes('json')) {
-                fetch(downloadUrl).then(r => r.text()).then(text => {
-                    content.innerHTML = `<pre style="padding: 20px; text-align: left; width: 100%; white-space: pre-wrap; font-size: 12px; color: var(--md-sys-color-on-surface); font-family: monospace;">${escapeHtml(text)}</pre>`;
-                });
-            } else {
-                content.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--md-sys-color-on-surface);">
-                    <p>No visual preview available for this type.</p>
-                    <p style="font-size: 12px; opacity: 0.7;">Type: ${type}</p>
-                    <button class="btn" style="margin-top: 16px;" onclick="window.open('${downloadUrl}')">Download Anyway</button>
-                </div>`;
-            }
+            content.innerHTML = 'Loading...'; modal.style.display = 'flex';
+            let dl = `/api/download/${id}`; if (userCoords.lat) dl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            if (type.startsWith('image/')) content.innerHTML = `<img src="${dl}" style="max-width: 100%; max-height: 80vh; object-fit: contain;">`;
+            else if (type.startsWith('video/')) content.innerHTML = `<video src="${dl}" controls style="max-width: 100%; max-height: 80vh;"></video>`;
+            else if (type === 'application/pdf') content.innerHTML = `<iframe src="${dl}" style="width: 80vw; height: 80vh; border: none;"></iframe>`;
+            else content.innerHTML = `<div style="padding: 40px; text-align: center;">No preview available.<br><button class="btn" style="margin-top: 16px;" onclick="window.open('${dl}')">Download</button></div>`;
         }
-
-        function closePreview() {
-            document.getElementById('preview-modal').style.display = 'none';
-            document.getElementById('preview-content').innerHTML = '';
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Polling for nearby files
-        setInterval(fetchNearby, 3000);
-        fetchNearby();
+        function closePreview() { document.getElementById('preview-modal').style.display = 'none'; }
+        function copyShareUrl() { const input = document.getElementById("share-url"); input.select(); navigator.clipboard.writeText(input.value); showStatus("Copied!"); }
+        function timeAgo(t) { const s = Math.floor((Date.now() / 1000) - t); if (s < 60) return 'just now'; if (s < 3600) return `${Math.floor(s / 60)}m ago`; return `${Math.floor(s / 3600)}h ago`; }
+        function showStatus(m) { const s = document.getElementById('status'); s.innerText = m; s.style.display = 'block'; setTimeout(() => s.style.display = 'none', 3000); }
     </script>
 </body>
 
