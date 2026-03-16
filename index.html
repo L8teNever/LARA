@@ -206,12 +206,18 @@
                     const div = document.createElement('div');
                     div.className = 'file-item';
                     const size = (f.size / 1024).toFixed(1) + ' KB';
+
+                    let downloadUrl = `/api/download/${f.id}`;
+                    if (userCoords.lat) {
+                        downloadUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                    }
+
                     div.innerHTML = `
                         <div class="file-info">
                             <span class="file-name">${f.filename}</span>
                             <span class="file-meta">${size} • from ${f.uploader_ip}</span>
                         </div>
-                        <button class="btn" onclick="window.open('/api/download/${f.id}')">Receive</button>
+                        <button class="btn" onclick="window.open('${downloadUrl}')">Receive</button>
                     `;
                     nearbyList.appendChild(div);
                 });
