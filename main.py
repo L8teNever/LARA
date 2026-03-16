@@ -95,6 +95,30 @@ def get_client_ip(request: Request):
         return forwarded.split(",")[0]
     return request.client.host
 
+# Cache IP geolocation results to avoid hammering the API
+_ip_geo_cache: dict = {}  # ip -> {"lat": float, "lon": float, "ts": float}
+
+def ip_to_coords(ip: str) -> tuple:
+    """Returns (lat, lon) for an IP via ip-api.com, with 10min cache. Returns (None, None) on failure."""
+    now = time.time()
+    cached = _ip_geo_cache.get(ip)
+    if cached and now - cached["ts"] < 600:
+        return cached["lat"], cached["lon"]
+    try:
+        req = urllib.request.Request(
+            f"http://ip-api.com/json/{ip}?fields=status,lat,lon",
+            headers={"User-Agent": "LARA/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            data = json_lib.loads(resp.read())
+            if data.get("status") == "success":
+                _ip_geo_cache[ip] = {"lat": data["lat"], "lon": data["lon"], "ts": now}
+                return data["lat"], data["lon"]
+    except Exception:
+        pass
+    _ip_geo_cache[ip] = {"lat": None, "lon": None, "ts": now}
+    return None, None
+
 def scan_for_viruses(file_path: str):
     try:
         # Connect to ClamAV (assumes service name 'clamav' in docker-compose)
@@ -161,11 +185,16 @@ async def upload_file(
     if is_public:
         access_token = secrets.token_urlsafe(192)
     
+    # IP geolocation fallback for uploads without coords
+    uploader_ip = get_client_ip(request)
+    if lat is None or lon is None:
+        lat, lon = ip_to_coords(uploader_ip)
+
     now = time.time()
     metadata = shared_bundle(
         id=bundle_id,
         files=bundle_files,
-        uploader_ip=get_client_ip(request),
+        uploader_ip=uploader_ip,
         uploader_name=uploader_name,
         target_peer_id=target_peer_id,
         lat=lat,
@@ -185,9 +214,17 @@ async def register_peer(request: Request, peer: Peer):
     existing = next((p for p in active_peers if p.id == peer.id), None)
     if existing:
         active_peers.remove(existing)
-    
+
     peer.ip = get_client_ip(request)
     peer.last_seen = time.time()
+
+    # IP geolocation fallback if browser didn't provide coords
+    if peer.lat is None or peer.lon is None:
+        ip_lat, ip_lon = ip_to_coords(peer.ip)
+        if ip_lat is not None:
+            peer.lat = ip_lat
+            peer.lon = ip_lon
+
     active_peers.append(peer)
     return {"status": "ok"}
 
@@ -196,28 +233,34 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
     now = time.time()
-    
+
+    # IP geolocation fallback for the requesting client
+    if lat is None or lon is None:
+        lat, lon = ip_to_coords(client_ip)
+
     # Cleanup old peers (not seen for 30s)
     to_remove = [p for p in active_peers if now - p.last_seen > 30]
     for p in to_remove: active_peers.remove(p)
-    
+
     nearby_peers = []
     for p in active_peers:
         peer_subnet = ".".join(p.ip.split(".")[:-1])
-        source = None
-        
+        sources = []
+
         # 1. Check Network (Subnet)
         if peer_subnet == client_subnet:
-            source = "Network"
-        # 2. Check Location (Geo)
-        elif lat is not None and lon is not None and p.lat is not None and p.lon is not None:
+            sources.append("Network")
+
+        # 2. Check Location (Geo) — always check, even if same subnet
+        if lat is not None and lon is not None and p.lat is not None and p.lon is not None:
             dist = ((p.lat - lat)**2 + (p.lon - lon)**2)**0.5
-            if dist < 0.005: 
-                source = "Location"
-        
-        if source:
+            if dist < 0.005:
+                sources.append("Location")
+
+        if sources:
             p_copy = p.copy()
-            p_copy.source = source
+            # Prefer "Network" label if both match, otherwise use what we have
+            p_copy.source = "Network" if "Network" in sources else "Location"
             nearby_peers.append(p_copy)
     return nearby_peers
 
@@ -231,6 +274,10 @@ async def discover_files(
     client_ip = get_client_ip(request)
     client_subnet = ".".join(client_ip.split(".")[:-1])
 
+    # IP geolocation fallback
+    if lat is None or lon is None:
+        lat, lon = ip_to_coords(client_ip)
+
     now = time.time()
     nearby_files = []
 
@@ -239,7 +286,7 @@ async def discover_files(
         for f in files_metadata:
             if f.expires_at >= now and f.target_peer_id == peer_id:
                 nearby_files.append(f)
-    
+
     for f in files_metadata:
         if f.expires_at < now:
             continue
