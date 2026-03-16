@@ -52,7 +52,8 @@ async def upload_file(
     
     access_token = None
     if is_public:
-        access_token = secrets.token_urlsafe(48)
+        # 192 bytes results in exactly 256 characters with URL-safe base64 encoding
+        access_token = secrets.token_urlsafe(192)
     
     with open(file_path, "wb") as buffer:
         content = await file.read()
