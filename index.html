@@ -149,12 +149,13 @@
             const fileCount = bundle.files.length;
             const display = isExpanded ? 'flex' : 'none';
             const icon = isExpanded ? '➖' : '➕';
+            const timeAgoStr = timeAgo(bundle.timestamp);
 
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleBundle('${bundle.id}')">
                     <div class="file-info">
                         <span class="file-name" style="font-weight: 600;">📦 Share from ${bundle.uploader_ip}</span>
-                        <span class="file-meta">${fileCount} file(s) • ${totalSize}</span>
+                        <span class="file-meta">${fileCount} file(s) • ${totalSize} • ${timeAgoStr}</span>
                     </div>
                     <div style="font-size: 20px;" id="icon-${bundle.id}">${icon}</div>
                 </div>
@@ -308,6 +309,16 @@
                 el.style.display = 'none';
                 icon.innerText = '➕';
             }
+        }
+
+        function timeAgo(timestamp) {
+            const seconds = Math.floor((new Date() - new Date(timestamp * 1000)) / 1000);
+            if (seconds < 60) return 'just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            return 'long ago';
         }
 
         function previewFile(id, name, type) {

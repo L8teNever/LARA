@@ -211,6 +211,9 @@ async def discover_files(
         if is_nearby:
             nearby_files.append(f)
             
+    # Sort by timestamp descending (newest first)
+    nearby_files.sort(key=lambda x: x.timestamp, reverse=True)
+            
     return nearby_files
 
 @app.get("/api/download/{file_id}")
