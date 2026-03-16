@@ -99,9 +99,20 @@
             <p style="font-size: 14px; opacity: 0.7; margin-bottom: 20px;">Select people nearby to send files directly
             </p>
 
-            <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()">
-                <div class="drop-zone-icon">📥</div>
-                <p>Select files to share</p>
+            <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()"
+                style="transition: all 0.3s ease;">
+                <div id="drop-zone-content">
+                    <div class="drop-zone-icon">📥</div>
+                    <p>Select files to share</p>
+                </div>
+                <div id="selected-files-list" style="display: none; width: 100%; text-align: left; padding: 10px;">
+                    <p
+                        style="font-weight: 600; font-size: 14px; margin-bottom: 8px; color: var(--md-sys-color-primary);">
+                        Selected Files:</p>
+                    <ul id="file-names" style="font-size: 12px; opacity: 0.8; list-style: none; padding: 0;"></ul>
+                    <p style="font-size: 11px; margin-top: 8px; opacity: 0.6; text-align: center;">Click to change files
+                    </p>
+                </div>
                 <input type="file" id="file-input" hidden multiple>
             </div>
 
@@ -165,6 +176,33 @@
 
             setInterval(checkActivity, 4000);
             checkActivity();
+
+            // File selection listener
+            document.getElementById('file-input').addEventListener('change', function (e) {
+                const files = e.target.files;
+                const content = document.getElementById('drop-zone-content');
+                const list = document.getElementById('selected-files-list');
+                const namesUl = document.getElementById('file-names');
+                const dropZone = document.getElementById('drop-zone');
+
+                if (files.length > 0) {
+                    content.style.display = 'none';
+                    list.style.display = 'block';
+                    namesUl.innerHTML = '';
+                    Array.from(files).forEach(f => {
+                        const li = document.createElement('li');
+                        li.innerText = `• ${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+                        namesUl.appendChild(li);
+                    });
+                    dropZone.style.borderColor = 'var(--md-sys-color-primary)';
+                    dropZone.style.background = 'var(--md-sys-color-primary-container)';
+                } else {
+                    content.style.display = 'block';
+                    list.style.display = 'none';
+                    dropZone.style.borderColor = '';
+                    dropZone.style.background = '';
+                }
+            });
         }
 
         async function registerMe() {
@@ -233,10 +271,15 @@
                 const res = await fetch('/api/upload', { method: 'POST', body: formData });
                 if (res.ok) {
                     alert(`Files dropped to ${target.name}!`);
+                    // Reset selection
+                    document.getElementById('file-input').value = '';
+                    document.getElementById('drop-zone-content').style.display = 'block';
+                    document.getElementById('selected-files-list').style.display = 'none';
+                    document.getElementById('drop-zone').style.borderColor = '';
+                    document.getElementById('drop-zone').style.background = '';
                     checkActivity();
                 }
                 else alert("Drop failed!");
-                fileInput.value = '';
             } catch (e) { alert("Error sending files"); }
         }
 
