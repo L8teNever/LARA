@@ -8,6 +8,22 @@
   "theme_color": "#6750A4",
   "orientation": "any",
   "categories": ["utilities", "productivity"],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": ["*/*"]
+        }
+      ]
+    }
+  },
   "icons": [
     {
       "src": "/static/icon-192.png",

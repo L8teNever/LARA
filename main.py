@@ -577,6 +577,13 @@ async def redirect_drop():
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/")
 
+@app.post("/share-target")
+async def share_target(request: Request):
+    """Fallback for Web Share Target when SW hasn't intercepted.
+    Redirect to main page — files will be lost but app opens."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/?shared=fallback", status_code=303)
+
 # PWA: manifest and service worker
 from fastapi.responses import JSONResponse
 
