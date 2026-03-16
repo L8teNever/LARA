@@ -368,12 +368,29 @@
             <div id="qr-result-container"
                 class="hidden bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[28px] border border-purple-100 shadow-sm mt-4 sm:mt-6 max-w-md mx-auto">
                 <div class="flex flex-col items-center">
-                    <div id="qrcode" class="p-3 sm:p-4 bg-white rounded-2xl mb-3 sm:mb-4"></div>
+                    <div id="qrcode" onclick="openQrFullscreen()" class="p-3 sm:p-4 bg-white rounded-2xl mb-3 sm:mb-4 cursor-pointer active:scale-95 transition-transform" title="Tippen für Vollbild"></div>
+                    <p class="text-[10px] text-gray-400 mb-2">Tippe auf den QR-Code für Vollbild</p>
                     <div class="flex gap-2 w-full">
                         <input type="text" id="share-url-display" readonly
                             class="flex-1 bg-gray-50 p-2.5 sm:p-3 rounded-xl border text-xs outline-none min-w-0">
                         <button onclick="copyShareUrl()"
                             class="px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs shrink-0">Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QR Fullscreen Modal -->
+            <div id="qr-fullscreen" class="fixed inset-0 z-[9999] hidden flex-col items-center justify-center bg-white" onclick="closeQrFullscreen()">
+                <div class="flex flex-col items-center gap-6 p-6" onclick="event.stopPropagation()">
+                    <div id="qrcode-large" class="bg-white rounded-3xl shadow-2xl p-6"></div>
+                    <p id="qr-fullscreen-url" class="text-xs text-gray-500 text-center max-w-[280px] break-all"></p>
+                    <div class="flex gap-3">
+                        <button onclick="copyShareUrl()" class="px-5 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm active:scale-95 transition-transform flex items-center gap-2">
+                            <i data-lucide="copy" class="w-4 h-4"></i> Link kopieren
+                        </button>
+                        <button onclick="closeQrFullscreen()" class="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm active:scale-95 transition-transform flex items-center gap-2">
+                            <i data-lucide="x" class="w-4 h-4"></i> Schließen
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1078,6 +1095,34 @@
 
         function closePreview() { document.getElementById('preview-modal').classList.add('hidden'); }
         function copyShareUrl() { const input = document.getElementById("share-url-display"); input.select(); navigator.clipboard.writeText(input.value); showMessage("Link kopiert!"); }
+
+        let currentShareUrl = '';
+
+        function openQrFullscreen() {
+            const url = document.getElementById('share-url-display').value;
+            if (!url) return;
+            currentShareUrl = url;
+
+            const modal = document.getElementById('qr-fullscreen');
+            const container = document.getElementById('qrcode-large');
+            const urlText = document.getElementById('qr-fullscreen-url');
+
+            // Generate large QR code
+            container.innerHTML = '';
+            const size = Math.min(window.innerWidth - 80, window.innerHeight - 250, 320);
+            new QRCode(container, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+
+            urlText.textContent = url;
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeQrFullscreen() {
+            const modal = document.getElementById('qr-fullscreen');
+            modal.classList.add('hidden');
+            modal.style.display = '';
+        }
 
         function switchView(viewName) {
             document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active')); document.getElementById('view-' + viewName).classList.add('active');
