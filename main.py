@@ -512,6 +512,60 @@ async def discover_files(
             
     return nearby_files
 
+# --- Contact API (runs on main app to avoid cross-origin issues) ---
+
+@app.post("/api/contacts/request")
+async def contact_request(request: Request, data: dict):
+    """Send a contact request from main app. No CF auth needed — uses peer_id ownership."""
+    my_peer_id = data.get("my_peer_id")
+    target_peer_id = data.get("target_peer_id")
+    if not my_peer_id or not target_peer_id:
+        raise HTTPException(status_code=400, detail="my_peer_id und target_peer_id erforderlich")
+
+    my_email = db.get_device_email(my_peer_id)
+    if not my_email:
+        raise HTTPException(status_code=403, detail="Dein Gerät ist nicht registriert. Melde dich zuerst in der Account-Seite an.")
+
+    target_email = db.get_device_email(target_peer_id)
+    if not target_email:
+        raise HTTPException(status_code=404, detail="Das Zielgerät hat keinen Account. Beide brauchen einen Account für Kontakte.")
+
+    result = db.send_contact_request(my_email, my_peer_id, target_email, target_peer_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.get("/api/contacts/pending")
+async def contact_pending(peer_id: str):
+    """Get pending contact requests for a peer."""
+    email = db.get_device_email(peer_id)
+    if not email:
+        return []
+    return db.get_pending_requests(email)
+
+@app.post("/api/contacts/{contact_id}/accept")
+async def contact_accept(contact_id: int, data: dict):
+    """Accept a contact request."""
+    peer_id = data.get("peer_id")
+    if not peer_id:
+        raise HTTPException(status_code=400, detail="peer_id erforderlich")
+    email = db.get_device_email(peer_id)
+    if not email:
+        raise HTTPException(status_code=403, detail="Nicht registriert")
+    if db.accept_contact(contact_id, email):
+        return {"status": "ok"}
+    raise HTTPException(status_code=404, detail="Anfrage nicht gefunden")
+
+@app.delete("/api/contacts/{contact_id}")
+async def contact_delete(contact_id: int, peer_id: str):
+    """Reject/delete a contact."""
+    email = db.get_device_email(peer_id)
+    if not email:
+        raise HTTPException(status_code=403, detail="Nicht registriert")
+    if db.reject_contact(contact_id, email):
+        return {"status": "ok"}
+    raise HTTPException(status_code=404, detail="Nicht gefunden")
+
 @app.get("/api/ip-location")
 async def ip_location(request: Request):
     """Fallback geolocation via IP when browser geolocation is unavailable"""

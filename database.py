@@ -191,15 +191,31 @@ def get_contacts(email: str) -> list:
     """, (email, email)).fetchall()
     return [dict(r) for r in rows]
 
+def get_same_account_peer_ids(peer_id: str) -> set:
+    """Get all other peer_ids that belong to the same email account.
+    These are the user's own devices — always linked automatically."""
+    conn = get_db()
+    row = conn.execute("SELECT email FROM devices WHERE peer_id = ?", (peer_id,)).fetchone()
+    if not row:
+        return set()
+    rows = conn.execute("SELECT peer_id FROM devices WHERE email = ? AND peer_id != ?",
+                         (row["email"], peer_id)).fetchall()
+    return {r["peer_id"] for r in rows}
+
 def get_saved_peer_ids(peer_id: str) -> set:
-    """Get all peer_ids that are saved contacts of this peer_id (accepted contacts).
+    """Get all peer_ids that should always be visible: own devices + accepted contacts.
     Used by main app's discover to always show saved contacts."""
     conn = get_db()
+    result = set()
+
+    # 1. Own devices (same email = automatically linked)
+    result.update(get_same_account_peer_ids(peer_id))
+
+    # 2. Accepted contacts
     rows = conn.execute("""
         SELECT requester_peer_id, target_peer_id FROM contacts
         WHERE (requester_peer_id = ? OR target_peer_id = ?) AND status = 'accepted'
     """, (peer_id, peer_id)).fetchall()
-    result = set()
     for r in rows:
         if r["requester_peer_id"] == peer_id:
             result.add(r["target_peer_id"])

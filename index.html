@@ -778,6 +778,7 @@
             setInterval(registerMe, 5000); registerMe();
             setInterval(fetchPeers, 3000); fetchPeers();
             setInterval(refreshActivity, 4000); refreshActivity();
+            setInterval(checkContactRequests, 10000); checkContactRequests();
 
             // Auto-start ultrasonic if previously enabled
             if (localStorage.getItem('lara_sonic') === 'on') {
@@ -986,23 +987,77 @@
             closePeerAction();
 
             try {
-                const res = await fetch(`${ACCOUNT_URL}/api/account/contacts/request`, {
+                const res = await fetch('/api/contacts/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
                     body: JSON.stringify({ my_peer_id: myId, target_peer_id: target.id })
                 });
                 if (res.ok) {
                     showMessage(`Kontaktanfrage an <b>${target.name}</b> gesendet!`);
-                } else if (res.status === 401) {
-                    showMessage('Du musst angemeldet sein um Kontakte zu speichern. Öffne die Account-Seite.');
                 } else {
                     const err = await res.json();
                     showMessage(err.detail || 'Fehler beim Speichern.');
                 }
             } catch (e) {
-                showMessage('Account-Server nicht erreichbar. Bist du angemeldet?');
+                showMessage('Fehler beim Speichern.');
             }
+        }
+
+        let seenContactRequestIds = new Set();
+        async function checkContactRequests() {
+            try {
+                const res = await fetch(`/api/contacts/pending?peer_id=${encodeURIComponent(myId)}`);
+                if (!res.ok) return;
+                const requests = await res.json();
+                for (const r of requests) {
+                    if (seenContactRequestIds.has(r.id)) continue;
+                    seenContactRequestIds.add(r.id);
+                    showContactRequestNotification(r);
+                }
+            } catch (e) {}
+        }
+
+        function showContactRequestNotification(req) {
+            const name = req.requester_name || req.requester_email;
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <div class="mb-4">
+                    <div class="w-14 h-14 bg-amber-100 rounded-2xl mx-auto mb-3 flex items-center justify-center">
+                        <i data-lucide="user-plus" class="w-7 h-7 text-amber-600"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-1">Kontaktanfrage</h3>
+                    <p class="text-sm text-gray-500"><b>${name}</b> möchte dich als Kontakt speichern</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="rejectContactRequest(${req.id})" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-sm">Ablehnen</button>
+                    <button onclick="acceptContactRequest(${req.id})" class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-sm shadow-lg">Annehmen</button>
+                </div>
+            `;
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+            document.querySelector('#modal-backdrop .bg-white button[onclick="closeModal()"]').style.display = 'none';
+            lucide.createIcons();
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        }
+
+        async function acceptContactRequest(id) {
+            try {
+                await fetch(`/api/contacts/${id}/accept`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ peer_id: myId })
+                });
+                showMessage('Kontakt akzeptiert!');
+            } catch (e) { showMessage('Fehler'); }
+            closeModal();
+            document.querySelector('#modal-backdrop .bg-white button[onclick="closeModal()"]').style.display = '';
+        }
+
+        async function rejectContactRequest(id) {
+            try {
+                await fetch(`/api/contacts/${id}?peer_id=${encodeURIComponent(myId)}`, { method: 'DELETE' });
+                showMessage('Anfrage abgelehnt');
+            } catch (e) { showMessage('Fehler'); }
+            closeModal();
+            document.querySelector('#modal-backdrop .bg-white button[onclick="closeModal()"]').style.display = '';
         }
 
         async function startDrop(target) {
