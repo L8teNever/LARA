@@ -103,6 +103,10 @@ manual_pairing_codes: dict = {}
 manual_pairs: dict = {}
 
 import random
+import database as db
+
+# Init shared database on import
+db.init_db()
 
 def is_nearby_geo(lat1, lon1, src1, lat2, lon2, src2) -> bool:
     """Check if two coordinates are nearby, with dynamic radius based on source accuracy.
@@ -260,6 +264,13 @@ async def register_peer(request: Request, peer: Peer):
             peer.coord_source = "ip"
 
     active_peers.append(peer)
+
+    # Update device heartbeat in account DB (if registered)
+    try:
+        db.update_device_heartbeat(peer.id)
+    except Exception:
+        pass
+
     return {"status": "ok"}
 
 @app.get("/api/peers/all-ids")
@@ -389,6 +400,23 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
     to_remove = [p for p in active_peers if now - p.last_seen > 30]
     for p in to_remove: active_peers.remove(p)
 
+    # Cleanup pairs referencing dead peers (cache cleared = new peer_id, old one never heartbeats again)
+    alive_ids = {p.id for p in active_peers}
+    dead_ultrasonic = [k for k in ultrasonic_pairs if not k.issubset(alive_ids)]
+    for k in dead_ultrasonic:
+        del ultrasonic_pairs[k]
+    dead_manual = [k for k in manual_pairs if not k.issubset(alive_ids)]
+    for k in dead_manual:
+        del manual_pairs[k]
+
+    # Load saved contacts for this peer from account system
+    saved_contact_ids = set()
+    if peer_id:
+        try:
+            saved_contact_ids = db.get_saved_peer_ids(peer_id)
+        except Exception:
+            pass
+
     nearby_peers = []
     for p in active_peers:
         peer_subnet = ".".join(p.ip.split(".")[:-1])
@@ -414,10 +442,16 @@ async def discover_peers(request: Request, lat: Optional[float] = None, lon: Opt
             if pair_key in manual_pairs and manual_pairs[pair_key] > now:
                 sources.append("Manual")
 
+        # 5. Saved contacts (persistent, from account system)
+        if peer_id and p.id in saved_contact_ids:
+            sources.append("Saved")
+
         if sources:
             p_copy = p.copy()
-            # Priority: Manual > Ultrasonic > Network > Location
-            if "Manual" in sources:
+            # Priority: Saved > Manual > Ultrasonic > Network > Location
+            if "Saved" in sources:
+                p_copy.source = "Saved"
+            elif "Manual" in sources:
                 p_copy.source = "Manual"
             elif "Ultrasonic" in sources:
                 p_copy.source = "Ultrasonic"
@@ -566,6 +600,20 @@ async def cleanup_loop():
                         os.remove(file_path)
                         print(f"Cleanup: Deleted expired file {f.filename}")
                     except: pass
+
+        # Cleanup stale peers, pairs, and pairing codes
+        stale_peers = [p for p in active_peers if now - p.last_seen > 60]
+        for p in stale_peers:
+            active_peers.remove(p)
+        alive_ids = {p.id for p in active_peers}
+        for d in [ultrasonic_pairs, manual_pairs]:
+            dead = [k for k in d if not k.issubset(alive_ids)]
+            for k in dead:
+                del d[k]
+        expired_codes = [c for c, v in manual_pairing_codes.items() if v["expires"] < now]
+        for c in expired_codes:
+            del manual_pairing_codes[c]
+
         await asyncio.sleep(60)
 
 @app.on_event("startup")

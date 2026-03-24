@@ -5,8 +5,10 @@ services:
     image: l8tenever/lara:latest
     ports:
       - "80:8000"
+      - "81:8001"
     volumes:
       - ./uploads:/app/uploads
+      - ./data:/app/data
     restart: always
     depends_on:
       - clamav

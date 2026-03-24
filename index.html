@@ -509,6 +509,20 @@
                         </div>
                     </div>
 
+                    <!-- Account Link -->
+                    <a href="javascript:void(0)" onclick="window.open(`${window.location.protocol}//${window.location.hostname}:${ACCOUNT_PORT}/`, '_blank')"
+                       class="m3-card p-4 sm:p-6 border border-white flex items-center justify-between cursor-pointer hover:shadow-md transition-shadow block no-underline">
+                        <div class="flex items-center gap-3 sm:gap-4">
+                            <div class="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="shield-check"
+                                    class="w-5 h-5 sm:w-6 sm:h-6"></i></div>
+                            <div>
+                                <p class="font-bold text-sm sm:text-base text-gray-900">Account & Kontakte</p>
+                                <p class="text-xs text-gray-400">Geräte & Kontakte dauerhaft speichern</p>
+                            </div>
+                        </div>
+                        <div class="text-gray-400"><i data-lucide="external-link" class="w-4 h-4"></i></div>
+                    </a>
+
                     <!-- Manual Pairing -->
                     <div class="m3-card p-4 sm:p-6 border border-white">
                         <div class="flex items-center justify-between">
@@ -654,6 +668,30 @@
         </div>
     </div>
 
+    <!-- Peer Action Modal -->
+    <div id="peer-action-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[3000] hidden flex items-end sm:items-center justify-center p-0 sm:p-6" onclick="event.target===this&&closePeerAction()">
+        <div class="bg-white rounded-t-[28px] sm:rounded-[32px] w-full sm:max-w-sm shadow-2xl overflow-hidden transform transition-all animate-[slideUp_0.3s_ease-out]">
+            <div class="px-6 pt-6 pb-2 text-center">
+                <div id="peer-action-icon" class="w-14 h-14 bg-blue-500 rounded-2xl mx-auto mb-3 flex items-center justify-center text-white">
+                    <i data-lucide="smartphone" class="w-7 h-7"></i>
+                </div>
+                <h3 id="peer-action-name" class="text-lg font-bold text-gray-900"></h3>
+                <p id="peer-action-source" class="text-xs text-gray-400 mt-1"></p>
+            </div>
+            <div class="px-5 pb-6 pt-3 space-y-2.5">
+                <button id="peer-action-send" onclick="peerActionSend()" class="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors active:scale-95">
+                    <i data-lucide="send" class="w-4 h-4"></i> Dateien senden
+                </button>
+                <button id="peer-action-save" onclick="peerActionSaveContact()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors active:scale-95">
+                    <i data-lucide="star" class="w-4 h-4"></i> Kontakt speichern
+                </button>
+                <button onclick="closePeerAction()" class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-2xl font-bold text-sm transition-colors active:scale-95">
+                    Abbrechen
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Generic Modal (Alerts/Info) -->
     <div id="modal-backdrop"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[2500] hidden flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -783,12 +821,28 @@
                 // Clear the stash
                 await caches.delete('lara-share-target');
 
-                if (files.length > 0) {
-                    handleFiles(files);
-                    showMessage(`<b>${files.length} Datei${files.length > 1 ? 'en' : ''}</b> über Teilen empfangen — wähle ein Gerät zum Senden.`);
+                if (files.length === 0) return;
+
+                // Add files to UI so user sees them
+                handleFiles(files);
+
+                // Auto-upload immediately so files are ready to be sent
+                const formData = new FormData();
+                files.forEach(f => formData.append('files', f));
+                formData.append('uploader_name', myName);
+                if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
+
+                showMessage(`<b>${files.length} Datei${files.length > 1 ? 'en' : ''}</b> wird hochgeladen...`);
+
+                const res2 = await fetch('/api/upload', { method: 'POST', body: formData });
+                if (res2.ok) {
+                    showMessage(`<b>${files.length} Datei${files.length > 1 ? 'en' : ''}</b> hochgeladen — wähle ein Gerät zum Senden oder tippe auf ein Gerät im Radar.`);
+                } else {
+                    showMessage('Fehler beim Hochladen.');
                 }
             } catch (e) {
                 console.error('Error loading shared files:', e);
+                showMessage('Fehler beim Laden der geteilten Dateien.');
             }
         }
 
@@ -851,9 +905,9 @@
                 node.dataset.peerId = p.id;
                 node.style.setProperty('--tx', x + 'px');
                 node.style.setProperty('--ty', y + 'px');
-                node.onclick = () => startDrop(p);
-                const color = p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
-                const icon = p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
+                node.onclick = () => onPeerClick(p);
+                const color = p.source === 'Saved' ? 'bg-emerald-500' : p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
+                const icon = p.source === 'Saved' ? 'star' : p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
                 node.innerHTML = `
                     <div class="relative w-11 h-11 sm:w-14 sm:h-14 ${color} rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform">
                         <i data-lucide="smartphone" class="w-5 h-5 sm:w-6 sm:h-6"></i>
@@ -895,6 +949,61 @@
         }
         function removeFile(el, name, size) { selectedFiles = selectedFiles.filter(f => !(f.name === name && f.size === size)); el.closest('div.bg-white').remove(); if (selectedFiles.length === 0) document.getElementById('file-list-container').classList.add('hidden'); }
         function clearFiles() { selectedFiles = []; document.getElementById('file-list').innerHTML = ''; document.getElementById('file-list-container').classList.add('hidden'); }
+
+        let currentActionPeer = null;
+        const ACCOUNT_PORT = 8001;
+
+        function onPeerClick(peer) {
+            if (selectedFiles.length > 0) {
+                // Files selected → send directly
+                startDrop(peer);
+            } else {
+                // No files → show action menu
+                currentActionPeer = peer;
+                const sourceLabels = { Saved: 'Gespeicherter Kontakt', Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
+                document.getElementById('peer-action-name').textContent = peer.name;
+                document.getElementById('peer-action-source').textContent = sourceLabels[peer.source] || peer.source;
+                // If already saved, hide save button
+                document.getElementById('peer-action-save').style.display = peer.source === 'Saved' ? 'none' : 'flex';
+                document.getElementById('peer-action-modal').classList.remove('hidden');
+                lucide.createIcons();
+            }
+        }
+
+        function closePeerAction() {
+            document.getElementById('peer-action-modal').classList.add('hidden');
+            currentActionPeer = null;
+        }
+
+        function peerActionSend() {
+            closePeerAction();
+            showMessage('Wähle zuerst Dateien aus, dann tippe auf das Gerät.');
+        }
+
+        async function peerActionSaveContact() {
+            if (!currentActionPeer) return;
+            const target = currentActionPeer;
+            closePeerAction();
+
+            try {
+                const res = await fetch(`${window.location.protocol}//${window.location.hostname}:${ACCOUNT_PORT}/api/account/contacts/request`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ my_peer_id: myId, target_peer_id: target.id })
+                });
+                if (res.ok) {
+                    showMessage(`Kontaktanfrage an <b>${target.name}</b> gesendet!`);
+                } else if (res.status === 401) {
+                    showMessage('Du musst angemeldet sein um Kontakte zu speichern. Öffne die Account-Seite.');
+                } else {
+                    const err = await res.json();
+                    showMessage(err.detail || 'Fehler beim Speichern.');
+                }
+            } catch (e) {
+                showMessage('Account-Server nicht erreichbar. Bist du angemeldet?');
+            }
+        }
 
         async function startDrop(target) {
             if (selectedFiles.length === 0) { showMessage(`Wähle zuerst Dateien aus.`); return; }
@@ -1005,8 +1114,8 @@
                                 <i data-lucide="package" class="w-4 h-4 sm:w-5 sm:h-5"></i>
                             </div>
                             <div class="min-w-0">
-                                <p class="text-[11px] sm:text-xs font-bold truncate">Freigabe von ${bundle.uploader_ip}</p>
-                                <p class="text-[8px] sm:text-[9px] text-gray-500">${bundle.files.length} Datei(en) • ${timeAgo(bundle.timestamp)}</p>
+                                <p class="text-[11px] sm:text-xs font-bold truncate">${bundle.uploader_name || 'Unbekannt'}</p>
+                                <p class="text-[8px] sm:text-[9px] text-gray-500">${bundle.files.length} Datei${bundle.files.length > 1 ? 'en' : ''} · ${formatFileSize(bundle.files.reduce((s,f)=>s+f.size,0))} · ${timeAgo(bundle.timestamp)}</p>
                             </div>
                         </div>
                         <div class="p-1.5 sm:p-2 bg-purple-50 rounded-full text-purple-600 shrink-0"><i data-lucide="chevron-right" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i></div>
@@ -1018,25 +1127,65 @@
 
         async function handlePublicToken(token) { const res = await fetch(`/api/p/${token}`); if (res.ok) { const bundle = await res.json(); showBundlePreview(bundle); } }
         function handleBundleDownload(id, token) { fetch(token ? `/api/p/${token}` : `/api/discover`).then(r => r.json()).then(data => { const bundle = Array.isArray(data) ? data.find(b => b.id === id) : data; if (bundle) showBundlePreview(bundle); }); }
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        }
+
+        function getFileIcon(type) {
+            if (type.startsWith('image/')) return 'image';
+            if (type.startsWith('video/')) return 'film';
+            if (type.startsWith('audio/')) return 'music';
+            if (type === 'application/pdf') return 'file-text';
+            if (type.includes('zip') || type.includes('rar') || type.includes('tar')) return 'archive';
+            return 'file';
+        }
+
         function showBundlePreview(bundle) {
             const modal = document.getElementById('preview-modal'); const content = document.getElementById('preview-content');
             const fileName = document.getElementById('preview-file-name'); const fileMeta = document.getElementById('preview-file-meta');
             const dlBtn = document.getElementById('preview-download-btn');
-            fileName.innerText = "Empfange Freigabe"; fileMeta.innerText = `${bundle.files.length} Datei(en)`; dlBtn.style.display = 'none';
-            content.innerHTML = `<div class="w-full max-w-lg space-y-3 sm:space-y-4 px-1 sm:px-2">${bundle.files.map(f => {
+            const sender = bundle.uploader_name || 'Unbekannt';
+            const totalSize = bundle.files.reduce((sum, f) => sum + f.size, 0);
+            fileName.innerText = `Von ${sender}`; fileMeta.innerText = `${bundle.files.length} Datei${bundle.files.length > 1 ? 'en' : ''} · ${formatFileSize(totalSize)}`; dlBtn.style.display = 'none';
+
+            const downloadAllBtn = bundle.files.length > 1 ? `
+                <button onclick="downloadAllFiles(${JSON.stringify(bundle.files.map(f => f.id)).replace(/"/g, '&quot;')})" class="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors active:scale-95 mb-3 sm:mb-4 shadow-lg shadow-purple-200">
+                    <i data-lucide="download" class="w-4 h-4"></i> Alle herunterladen
+                </button>` : '';
+
+            content.innerHTML = `<div class="w-full max-w-lg px-1 sm:px-2">
+                ${downloadAllBtn}
+                <div class="space-y-2.5 sm:space-y-3">${bundle.files.map(f => {
                 let dlUrl = `/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`; if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                const icon = getFileIcon(f.content_type);
+                const canPreview = f.content_type.startsWith('image/') || f.content_type.startsWith('video/') || f.content_type === 'application/pdf';
                 return `<div class="bg-white p-3 sm:p-4 rounded-[18px] sm:rounded-[24px] border border-purple-100 shadow-sm flex items-center justify-between gap-2">
                             <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                                <div class="p-2 sm:p-3 bg-purple-50 rounded-xl sm:rounded-2xl text-purple-600 shrink-0"><i data-lucide="file" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
-                                <div class="min-w-0"><p class="text-[11px] sm:text-xs font-bold truncate">${f.filename}</p><p class="text-[8px] sm:text-[9px] text-gray-500">${(f.size / 1024).toFixed(1)} KB</p></div>
+                                <div class="p-2 sm:p-3 bg-purple-50 rounded-xl sm:rounded-2xl text-purple-600 shrink-0"><i data-lucide="${icon}" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
+                                <div class="min-w-0"><p class="text-[11px] sm:text-xs font-bold truncate">${f.filename}</p><p class="text-[8px] sm:text-[9px] text-gray-500">${formatFileSize(f.size)}</p></div>
                             </div>
                             <div class="flex gap-1.5 sm:gap-2 shrink-0">
-                                <button onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')" class="px-2 sm:px-3 py-1 sm:py-1.5 bg-purple-50 text-purple-600 rounded-lg sm:rounded-xl font-bold text-[9px] sm:text-[10px] active:scale-95 transition-transform">Preview</button>
-                                <button onclick="window.open('${dlUrl}')" class="px-2 sm:px-3 py-1 sm:py-1.5 bg-purple-600 text-white rounded-lg sm:rounded-xl font-bold text-[9px] sm:text-[10px] shadow-sm active:scale-95 transition-transform">Get</button>
+                                ${canPreview ? `<button onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')" class="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-50 text-purple-600 rounded-xl font-bold text-[9px] sm:text-[10px] active:scale-95 transition-transform flex items-center gap-1"><i data-lucide="eye" class="w-3 h-3"></i> Vorschau</button>` : ''}
+                                <a href="${dlUrl}" download="${f.filename}" class="px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-600 text-white rounded-xl font-bold text-[9px] sm:text-[10px] shadow-sm active:scale-95 transition-transform flex items-center gap-1 no-underline"><i data-lucide="download" class="w-3 h-3"></i> Laden</a>
                             </div>
                         </div>`;
-            }).join('')}</div>`;
+            }).join('')}</div></div>`;
             modal.classList.remove('hidden'); lucide.createIcons();
+        }
+
+        function downloadAllFiles(fileIds) {
+            fileIds.forEach((id, i) => {
+                setTimeout(() => {
+                    let dlUrl = `/api/download/${id}?peer_id=${encodeURIComponent(myId)}`;
+                    if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                    const a = document.createElement('a'); a.href = dlUrl; a.download = ''; a.style.display = 'none';
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                }, i * 300); // Stagger downloads to avoid browser blocking
+            });
+            showMessage(`<b>${fileIds.length} Dateien</b> werden heruntergeladen...`);
         }
         function previewFile(id, name, type) {
             const content = document.getElementById('preview-content'); const fileName = document.getElementById('preview-file-name');
@@ -1079,7 +1228,18 @@
         function acceptDrop() {
             document.getElementById('drop-notification').classList.add('hidden');
             if (currentDropBundle) {
-                showBundlePreview(currentDropBundle);
+                if (currentDropBundle.files.length === 1) {
+                    // Single file → download immediately
+                    const f = currentDropBundle.files[0];
+                    let dlUrl = `/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`;
+                    if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
+                    const a = document.createElement('a'); a.href = dlUrl; a.download = f.filename; a.style.display = 'none';
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    showMessage(`<b>${f.filename}</b> wird heruntergeladen...`);
+                } else {
+                    // Multiple files → show preview with download-all
+                    showBundlePreview(currentDropBundle);
+                }
                 currentDropBundle = null;
             }
         }
