@@ -55,7 +55,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Allow CORS from main app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://drop.l8tenever.com", "https://account.drop.l8tenever.com"],
+    allow_origins=["https://drop.l8tenever.com", "https://account-drop.l8tenever.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
