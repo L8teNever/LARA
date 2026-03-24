@@ -8,10 +8,12 @@ import time
 import json as json_lib
 from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import database as db
+
+MAIN_SITE = "https://drop.l8tenever.com"
 
 app = FastAPI(title="LARA Account")
 
@@ -22,10 +24,12 @@ def get_user_email(request: Request) -> str:
     CF Access sets Cf-Access-Authenticated-User-Email header after auth."""
     email = request.headers.get("Cf-Access-Authenticated-User-Email")
     if not email:
-        # Fallback: check cookie-based JWT (for development/testing)
-        # In production, Cloudflare always sets the header
-        raise HTTPException(status_code=401, detail="Nicht angemeldet. Bitte über Cloudflare Access einloggen.")
+        raise HTTPException(status_code=401, detail="Nicht angemeldet.")
     return email.lower().strip()
+
+def is_authenticated(request: Request) -> bool:
+    """Check if request comes through Cloudflare Zero Trust."""
+    return request.headers.get("Cf-Access-Authenticated-User-Email") is not None
 
 # --- Security Headers ---
 
@@ -51,7 +55,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Allow CORS from main app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://drop.l8tenever.com", "https://account.drop.l8tenever.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -187,5 +191,7 @@ async def delete_contact(request: Request, contact_id: int):
 # --- Serve Account UI ---
 
 @app.get("/", response_class=HTMLResponse)
-async def account_page():
+async def account_page(request: Request):
+    if not is_authenticated(request):
+        return RedirectResponse(url=MAIN_SITE)
     return FileResponse(os.path.join(os.path.dirname(__file__), "account.html"))
