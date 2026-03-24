@@ -510,7 +510,7 @@
                     </div>
 
                     <!-- Account Link -->
-                    <a href="javascript:void(0)" onclick="window.open(ACCOUNT_URL, '_blank')"
+                    <a href="javascript:void(0)" onclick="window.open(`${ACCOUNT_URL}?peer_id=${encodeURIComponent(myId)}&name=${encodeURIComponent(myName)}`, '_blank')"
                        class="m3-card p-4 sm:p-6 border border-white flex items-center justify-between cursor-pointer hover:shadow-md transition-shadow block no-underline">
                         <div class="flex items-center gap-3 sm:gap-4">
                             <div class="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="shield-check"

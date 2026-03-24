@@ -112,17 +112,26 @@
     </div>
 
     <script>
-        // Get or create peer_id (shared with main app via localStorage)
-        let myPeerId = localStorage.getItem('lara_peer_id');
+        // Get peer_id from URL params (passed by main app) or fallback to localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let myPeerId = urlParams.get('peer_id') || localStorage.getItem('lara_peer_id');
         if (!myPeerId) {
             myPeerId = crypto.randomUUID();
-            localStorage.setItem('lara_peer_id', myPeerId);
         }
+        // Always save to this domain's localStorage too
+        localStorage.setItem('lara_peer_id', myPeerId);
         document.getElementById('device-peer-id').textContent = myPeerId;
 
-        // Load saved device name
-        const savedName = localStorage.getItem('lara_device_name') || '';
+        // Get device name from URL params or localStorage
+        const urlName = urlParams.get('name');
+        const savedName = urlName || localStorage.getItem('lara_device_name') || '';
+        if (urlName) localStorage.setItem('lara_device_name', urlName);
         document.getElementById('device-name').value = savedName;
+
+        // Clean URL after extracting params
+        if (urlParams.has('peer_id')) {
+            window.history.replaceState({}, '', '/');
+        }
 
         function showToast(msg) {
             const existing = document.querySelector('.toast');
@@ -301,8 +310,21 @@
             } catch (e) { showToast('Fehler'); }
         }
 
+        // Auto-register this device on page load if name is available
+        async function autoRegister() {
+            if (savedName) {
+                try {
+                    await fetch('/api/account/devices/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ peer_id: myPeerId, name: savedName })
+                    });
+                } catch (e) {}
+            }
+        }
+
         // Init
-        loadAccount();
+        autoRegister().then(() => loadAccount());
         // Refresh every 10s
         setInterval(loadAccount, 10000);
 
