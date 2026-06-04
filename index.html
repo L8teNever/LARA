@@ -686,6 +686,33 @@
         </div>
     </div>
 
+    <!-- QR Share Modal -->
+    <div id="qr-share-modal" class="fixed inset-0 bg-black/40 backdrop-blur-md z-[3000] hidden flex items-end sm:items-center justify-center p-0 sm:p-6" onclick="event.target===this&&closeQrShareModal()">
+        <div class="bg-white rounded-t-[28px] sm:rounded-[32px] w-full sm:max-w-sm shadow-2xl overflow-hidden transform transition-all animate-[slideUp_0.3s_ease-out]">
+            <div class="px-6 pt-6 pb-3">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg">
+                        <i data-lucide="qr-code" class="w-7 h-7"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="text-lg font-bold text-gray-900">QR / Link erstellen</h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Wähle Dateien zum Teilen</p>
+                    </div>
+                </div>
+            </div>
+            <div class="px-5 pb-6 pt-2 space-y-2">
+                <label class="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-sm flex items-center gap-3 px-5 transition-all active:scale-[0.97] cursor-pointer">
+                    <div class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0"><i data-lucide="paperclip" class="w-4 h-4"></i></div>
+                    <div class="text-left"><span class="block">Dateien auswählen</span><span class="text-[10px] font-normal text-white/70">Tippe zum Auswählen</span></div>
+                    <input type="file" multiple class="hidden" onchange="qrShareFileSelected(this)">
+                </label>
+                <button onclick="closeQrShareModal()" class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-2xl font-semibold text-sm transition-all active:scale-[0.97] mt-1">
+                    Abbrechen
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Generic Modal (Alerts/Info) -->
     <div id="modal-backdrop"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[2500] hidden flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -1135,18 +1162,42 @@
         }
 
         async function startGlobalShare() {
-            if (selectedFiles.length === 0) { showMessage("Wähle zuerst Dateien aus."); return; }
-            const formData = new FormData(); selectedFiles.forEach(f => formData.append('files', f));
+            if (selectedFiles.length === 0) {
+                document.getElementById('qr-share-modal').classList.remove('hidden');
+                lucide.createIcons();
+                return;
+            }
+            await doGlobalShare(selectedFiles);
+            clearFiles();
+        }
+
+        async function qrShareFileSelected(input) {
+            if (!input.files.length) return;
+            closeQrShareModal();
+            await doGlobalShare(Array.from(input.files));
+            input.value = '';
+        }
+
+        function closeQrShareModal() {
+            document.getElementById('qr-share-modal').classList.add('hidden');
+        }
+
+        async function doGlobalShare(files) {
+            const formData = new FormData();
+            files.forEach(f => formData.append('files', f));
             formData.append('is_public', true); formData.append('expires_in', 1);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
             showMessage("Erstelle Freigabe...");
             try {
-                const res = await fetch('/api/upload', { method: 'POST', body: formData }); const data = await res.json();
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
                 if (res.ok) {
                     const fullUrl = `${window.location.origin}/?token=${data.access_token}`;
                     document.getElementById('share-url-display').value = fullUrl;
-                    document.getElementById('qrcode').innerHTML = ''; new QRCode(document.getElementById('qrcode'), { text: fullUrl, width: 120, height: 120 });
-                    document.getElementById('qr-result-container').classList.remove('hidden'); closeModal(); clearFiles();
+                    document.getElementById('qrcode').innerHTML = '';
+                    new QRCode(document.getElementById('qrcode'), { text: fullUrl, width: 120, height: 120 });
+                    document.getElementById('qr-result-container').classList.remove('hidden');
+                    closeModal();
                 }
             } catch (e) { showMessage("Fehler!"); }
         }
