@@ -355,6 +355,23 @@
                         <div id="file-list" class="space-y-2 sm:space-y-3 overflow-y-auto pr-2 no-scrollbar max-h-[200px] lg:max-h-[260px]"></div>
                     </section>
 
+                    <!-- Text Share -->
+                    <section>
+                        <div class="relative border-2 border-dashed border-purple-200 rounded-[24px] sm:rounded-[28px] bg-white/40 hover:border-purple-400 focus-within:border-purple-400 transition-colors">
+                            <textarea id="text-input" rows="3"
+                                placeholder="Text direkt tippen und an ein Gerät senden..."
+                                class="w-full bg-transparent rounded-[24px] sm:rounded-[28px] px-4 pt-4 pb-2 text-sm resize-none outline-none"
+                                oninput="onTextInput(this)"></textarea>
+                            <div class="flex items-center justify-between px-4 pb-3">
+                                <span class="text-[10px] text-gray-300 flex items-center gap-1.5">
+                                    <i data-lucide="mouse-pointer-click" class="w-3 h-3"></i>
+                                    Gerät antippen zum Senden
+                                </span>
+                                <button id="text-clear-btn" onclick="clearText()" class="hidden text-[10px] font-bold text-red-400 hover:text-red-600">Löschen</button>
+                            </div>
+                        </div>
+                    </section>
+
                     <!-- QR / Link Button inline on desktop -->
                     <button onclick="startGlobalShare()"
                         class="m3-card p-4 sm:p-5 lg:p-6 flex items-center lg:flex-col gap-3 lg:gap-3 hover:bg-purple-100 w-full">
@@ -690,6 +707,7 @@
         let myId = localStorage.getItem('lara_peer_id') || Math.random().toString(36).substring(2, 15);
         let myName = localStorage.getItem('lara_peer_name');
         let selectedFiles = [];
+        let selectedText = '';
         let userCoords = { lat: null, lon: null, source: null }; // source: "gps" or "ip"
         let seenDropIds = new Set();
         let currentDropBundle = null;
@@ -933,14 +951,48 @@
         function removeFile(el, name, size) { selectedFiles = selectedFiles.filter(f => !(f.name === name && f.size === size)); el.closest('div.bg-white').remove(); if (selectedFiles.length === 0) document.getElementById('file-list-container').classList.add('hidden'); }
         function clearFiles() { selectedFiles = []; document.getElementById('file-list').innerHTML = ''; document.getElementById('file-list-container').classList.add('hidden'); }
 
+        function escapeHtml(str) {
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function onTextInput(el) {
+            selectedText = el.value;
+            document.getElementById('text-clear-btn').classList.toggle('hidden', selectedText.length === 0);
+        }
+
+        function clearText() {
+            selectedText = '';
+            document.getElementById('text-input').value = '';
+            document.getElementById('text-clear-btn').classList.add('hidden');
+        }
+
+        async function startTextDrop(target) {
+            const text = selectedText.trim();
+            if (!text) return;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const file = new File([blob], 'nachricht.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('files', file);
+            formData.append('target_peer_id', target.id);
+            formData.append('uploader_name', myName);
+            if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
+            showMessage(`Sende Text an <b>${target.name}</b>...`);
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                if (res.ok) { showMessage('<b>Text gesendet!</b>'); clearText(); }
+                else showMessage('Fehler beim Senden.');
+            } catch(e) { showMessage('Fehler.'); }
+        }
+
         let currentActionPeer = null;
 
         function onPeerClick(peer) {
             if (selectedFiles.length > 0) {
-                // Files selected → send directly
                 startDrop(peer);
+            } else if (selectedText.trim()) {
+                startTextDrop(peer);
             } else {
-                // No files → show action menu
+                // No files/text → show action menu
                 currentActionPeer = peer;
                 const sourceLabels = { Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
                 document.getElementById('peer-action-name').textContent = peer.name;
@@ -1111,6 +1163,7 @@
         }
 
         function getFileIcon(type) {
+            if (type === 'text/plain') return 'message-square';
             if (type.startsWith('image/')) return 'image';
             if (type.startsWith('video/')) return 'film';
             if (type.startsWith('audio/')) return 'music';
@@ -1185,6 +1238,22 @@
             if (type.startsWith('image/')) { content.innerHTML = `<img src="${dlUrl}" class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl border-4 border-white">`; }
             else if (type.startsWith('video/')) { content.innerHTML = `<video src="${dlUrl}" controls class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl"></video>`; }
             else if (type === 'application/pdf') { content.innerHTML = `<iframe src="${dlUrl}" class="w-full h-[50vh] sm:h-[60vh] border-none rounded-2xl sm:rounded-3xl bg-white shadow-inner"></iframe>`; }
+            else if (type === 'text/plain') {
+                fetch(dlUrl).then(r => r.text()).then(text => {
+                    content.innerHTML = `<div class="w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-inner border border-gray-100">
+                        <pre class="text-sm text-gray-800 whitespace-pre-wrap break-words font-sans leading-relaxed">${escapeHtml(text)}</pre>
+                        <button onclick="navigator.clipboard.writeText(${JSON.stringify('')}).then(()=>showMessage('<b>Kopiert!</b>'))"
+                            class="mt-4 flex items-center gap-2 text-xs font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition-colors active:scale-95"
+                            data-text="${escapeHtml(text).replace(/"/g,'&quot;')}">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Text kopieren
+                        </button>
+                    </div>`;
+                    // Fix clipboard call after render
+                    const btn = content.querySelector('button');
+                    if (btn) btn.onclick = () => navigator.clipboard.writeText(text).then(() => showMessage('<b>Text kopiert!</b>')).catch(() => {});
+                    lucide.createIcons();
+                }).catch(() => { content.innerHTML = `<p class="text-gray-400 text-sm">Fehler beim Laden.</p>`; });
+            }
             else { content.innerHTML = `<div class="text-center p-8 sm:p-12 bg-white rounded-2xl sm:rounded-3xl shadow-inner"><i data-lucide="file-question" class="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-400"></i><p class="font-bold text-sm sm:text-base">Keine Vorschau möglich.</p></div>`; lucide.createIcons(); }
         }
         function showDropNotification(bundle) {
@@ -1192,27 +1261,51 @@
             const sender = bundle.uploader_name || 'Unbekannt';
             const fileCount = bundle.files.length;
             const totalSize = bundle.files.reduce((sum, f) => sum + f.size, 0);
+            const isTextDrop = fileCount === 1 && bundle.files[0].content_type === 'text/plain';
+
             document.getElementById('drop-sender-name').textContent = sender;
-            document.getElementById('drop-file-info').textContent = `${fileCount} Datei${fileCount > 1 ? 'en' : ''} · ${formatFileSize(totalSize)}`;
-
-            // Build file list preview
             const listEl = document.getElementById('drop-file-list');
-            listEl.innerHTML = bundle.files.slice(0, 4).map(f => {
-                const icon = getFileIcon(f.content_type);
-                return `<div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
-                    <div class="w-9 h-9 bg-white rounded-lg flex items-center justify-center text-gray-400 shrink-0 border"><i data-lucide="${icon}" class="w-4 h-4"></i></div>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-xs font-semibold truncate text-gray-800">${f.filename}</p>
-                        <p class="text-[10px] text-gray-400">${formatFileSize(f.size)}</p>
-                    </div>
-                </div>`;
-            }).join('') + (fileCount > 4 ? `<p class="text-[10px] text-gray-400 text-center py-1">+ ${fileCount - 4} weitere Dateien</p>` : '');
+            const acceptBtn = document.getElementById('drop-accept-btn');
 
-            document.getElementById('drop-accept-btn').onclick = () => acceptDrop();
+            if (isTextDrop) {
+                document.getElementById('drop-file-info').textContent = 'Textnachricht';
+                listEl.innerHTML = `<div class="p-3 bg-purple-50 rounded-xl border border-purple-100 min-h-[48px] flex items-center">
+                    <p class="text-xs text-purple-300 italic">Lade Text...</p>
+                </div>`;
+
+                const f = bundle.files[0];
+                let fetchedText = '';
+                fetch(`/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`).then(r => r.text()).then(text => {
+                    fetchedText = text;
+                    listEl.innerHTML = `<div class="p-3 bg-purple-50 rounded-xl border border-purple-100">
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed max-h-[120px] overflow-y-auto">${escapeHtml(text)}</p>
+                    </div>`;
+                }).catch(() => {});
+
+                acceptBtn.innerHTML = `<i data-lucide="copy" class="w-4 h-4"></i> Kopieren`;
+                acceptBtn.onclick = () => {
+                    navigator.clipboard.writeText(fetchedText || '').catch(() => {});
+                    dismissDrop();
+                    showMessage('<b>Text kopiert!</b>');
+                };
+            } else {
+                document.getElementById('drop-file-info').textContent = `${fileCount} Datei${fileCount > 1 ? 'en' : ''} · ${formatFileSize(totalSize)}`;
+                listEl.innerHTML = bundle.files.slice(0, 4).map(f => {
+                    const icon = getFileIcon(f.content_type);
+                    return `<div class="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
+                        <div class="w-9 h-9 bg-white rounded-lg flex items-center justify-center text-gray-400 shrink-0 border"><i data-lucide="${icon}" class="w-4 h-4"></i></div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-xs font-semibold truncate text-gray-800">${f.filename}</p>
+                            <p class="text-[10px] text-gray-400">${formatFileSize(f.size)}</p>
+                        </div>
+                    </div>`;
+                }).join('') + (fileCount > 4 ? `<p class="text-[10px] text-gray-400 text-center py-1">+ ${fileCount - 4} weitere Dateien</p>` : '');
+                acceptBtn.innerHTML = `<i data-lucide="download" class="w-4 h-4"></i> Annehmen`;
+                acceptBtn.onclick = () => acceptDrop();
+            }
+
             document.getElementById('drop-notification').classList.remove('hidden');
             lucide.createIcons();
-
-            // Vibrate on mobile if supported
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
 
