@@ -708,6 +708,7 @@
         let myName = localStorage.getItem('lara_peer_name');
         let selectedFiles = [];
         let selectedText = '';
+        let myDeviceInfo = { type: 'desktop', os: 'unknown' };
         let userCoords = { lat: null, lon: null, source: null }; // source: "gps" or "ip"
         let seenDropIds = new Set();
         let currentDropBundle = null;
@@ -744,8 +745,13 @@
         }
 
         function initApp() {
+            myDeviceInfo = detectDeviceType();
             document.getElementById('display-user-name').innerText = myName;
             document.getElementById('user-name-input').value = myName;
+
+            // Update center radar icon to match own device type
+            const centerIcon = document.querySelector('#radar-container .z-10 i[data-lucide="smartphone"]');
+            if (centerIcon) { centerIcon.setAttribute('data-lucide', getDeviceIcon(myDeviceInfo.type)); lucide.createIcons(); }
 
             // Geolocation: watchPosition for continuous updates + IP fallback
             if ("geolocation" in navigator) {
@@ -851,7 +857,7 @@
             if (!myName) return;
             await fetch('/api/peers/register', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0 })
+                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os })
             });
         }
 
@@ -909,9 +915,10 @@
                 node.onclick = () => onPeerClick(p);
                 const color = p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
                 const icon = p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
+                const deviceIcon = getDeviceIcon(p.device_type);
                 node.innerHTML = `
                     <div class="relative w-11 h-11 sm:w-14 sm:h-14 ${color} rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform">
-                        <i data-lucide="smartphone" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                        <i data-lucide="${deviceIcon}" class="w-5 h-5 sm:w-6 sm:h-6"></i>
                         <div class="connection-badge ${color} p-0.5 sm:p-1 rounded-full border-2 border-white"><i data-lucide="${icon}" class="w-2 h-2 sm:w-2.5 sm:h-2.5"></i></div>
                     </div>
                     <div class="mt-1.5 sm:mt-2 bg-white/90 backdrop-blur px-1.5 sm:px-2 py-0.5 rounded-full shadow-sm border text-center">
@@ -950,6 +957,35 @@
         }
         function removeFile(el, name, size) { selectedFiles = selectedFiles.filter(f => !(f.name === name && f.size === size)); el.closest('div.bg-white').remove(); if (selectedFiles.length === 0) document.getElementById('file-list-container').classList.add('hidden'); }
         function clearFiles() { selectedFiles = []; document.getElementById('file-list').innerHTML = ''; document.getElementById('file-list-container').classList.add('hidden'); }
+
+        function detectDeviceType() {
+            const ua = navigator.userAgent;
+            const touch = navigator.maxTouchPoints > 1;
+            const w = screen.width;
+
+            let os = 'unknown';
+            if (/android/i.test(ua))              os = 'android';
+            else if (/iphone|ipad|ipod/i.test(ua)) os = 'ios';
+            else if (/windows/i.test(ua))          os = 'windows';
+            else if (/mac os x/i.test(ua))         os = 'macos';
+            else if (/linux/i.test(ua))            os = 'linux';
+
+            let type = 'desktop';
+            if (/iphone/i.test(ua))                              type = 'phone';
+            else if (/ipad/i.test(ua))                           type = 'tablet';
+            else if (os === 'android' && touch && w < 768)       type = 'phone';
+            else if (os === 'android' && touch)                  type = 'tablet';
+            else if (touch && w < 600)                           type = 'phone';
+
+            return { type, os };
+        }
+
+        function getDeviceIcon(deviceType) {
+            if (deviceType === 'phone')   return 'smartphone';
+            if (deviceType === 'tablet')  return 'tablet';
+            if (deviceType === 'desktop') return 'monitor';
+            return 'smartphone';
+        }
 
         function escapeHtml(str) {
             return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -997,6 +1033,9 @@
                 const sourceLabels = { Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
                 document.getElementById('peer-action-name').textContent = peer.name;
                 document.getElementById('peer-action-source').textContent = sourceLabels[peer.source] || peer.source;
+                // Update modal icon to match peer device type
+                const modalIcon = document.querySelector('#peer-action-icon i');
+                if (modalIcon) modalIcon.setAttribute('data-lucide', getDeviceIcon(peer.device_type));
                 document.getElementById('peer-action-modal').classList.remove('hidden');
                 lucide.createIcons();
             }
