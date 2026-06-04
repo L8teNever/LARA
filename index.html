@@ -913,10 +913,14 @@
 
         async function registerMe() {
             if (!myName) return;
-            await fetch('/api/peers/register', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os, public_key: myPublicKeyRaw })
-            });
+            try {
+                await fetch('/api/peers/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+                    cache: 'no-store',
+                    body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os, public_key: myPublicKeyRaw })
+                });
+            } catch(e) { console.warn('registerMe:', e.message); }
         }
 
         function getRadarRadius() {
@@ -932,7 +936,8 @@
         async function fetchPeers() {
             let url = `/api/peers/discover?peer_id=${encodeURIComponent(myId)}`;
             if (userCoords.lat) url += `&lat=${userCoords.lat}&lon=${userCoords.lon}&coord_source=${userCoords.source || 'gps'}`;
-            const res = await fetch(url); const peers = await res.json();
+            const res = await fetch(url, { cache: 'no-store' }); const peers = await res.json();
+            if (!Array.isArray(peers)) return;
             peers.forEach(p => { if (p.public_key) peerPublicKeys.set(p.id, p.public_key); });
             const container = document.getElementById('nearby-peers-radar');
             const others = peers.filter(p => p.id !== myId);
@@ -1184,7 +1189,7 @@
             let params = [`peer_id=${encodeURIComponent(myId)}`];
             if (userCoords.lat) { params.push(`lat=${userCoords.lat}`); params.push(`lon=${userCoords.lon}`); params.push(`coord_source=${userCoords.source || 'gps'}`); }
             let url = '/api/discover?' + params.join('&');
-            const res = await fetch(url); const shares = await res.json();
+            const res = await fetch(url, { cache: 'no-store' }); const shares = await res.json();
 
             // 1. Incoming Directed Drops — detect NEW ones for popup
             const incoming = shares.filter(s => s.target_peer_id === myId);
