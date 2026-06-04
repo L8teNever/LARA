@@ -87,6 +87,8 @@ class Peer(BaseModel):
     coord_source: Optional[str] = None  # "gps" or "ip"
     last_seen: float
     source: Optional[str] = None  # Discovery source: 'Network' or 'Location'
+    device_type: Optional[str] = None  # 'phone', 'tablet', 'desktop'
+    device_os: Optional[str] = None
 
 files_metadata: List[shared_bundle] = []
 active_peers: List[Peer] = []
