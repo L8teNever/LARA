@@ -670,9 +670,14 @@
                 </div>
             </div>
             <div class="px-5 pb-6 pt-2 space-y-2">
-                <button id="peer-action-send" onclick="peerActionSend()" class="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-sm flex items-center gap-3 px-5 transition-all active:scale-[0.97]">
-                    <div class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0"><i data-lucide="send" class="w-4 h-4"></i></div>
-                    <div class="text-left"><span class="block">Dateien senden</span><span class="text-[10px] font-normal text-white/70">Wähle zuerst Dateien aus</span></div>
+                <label class="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-sm flex items-center gap-3 px-5 transition-all active:scale-[0.97] cursor-pointer">
+                    <div class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0"><i data-lucide="paperclip" class="w-4 h-4"></i></div>
+                    <div class="text-left"><span class="block">Dateien auswählen</span><span class="text-[10px] font-normal text-white/70">Tippe zum Auswählen</span></div>
+                    <input type="file" multiple class="hidden" onchange="peerActionFileSelected(this)">
+                </label>
+                <button onclick="peerActionSendText()" id="peer-action-text-btn" class="w-full py-3.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-2xl font-bold text-sm flex items-center gap-3 px-5 transition-all active:scale-[0.97] hidden">
+                    <div class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0"><i data-lucide="message-square" class="w-4 h-4"></i></div>
+                    <div class="text-left"><span class="block">Text senden</span><span id="peer-action-text-preview" class="text-[10px] font-normal text-white/70 truncate block max-w-[180px]"></span></div>
                 </button>
                 <button onclick="closePeerAction()" class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-2xl font-semibold text-sm transition-all active:scale-[0.97] mt-1">
                     Abbrechen
@@ -1062,14 +1067,22 @@
             } else if (selectedText.trim()) {
                 startTextDrop(peer);
             } else {
-                // No files/text → show action menu
+                // Nothing ready → open action sheet with file picker
                 currentActionPeer = peer;
                 const sourceLabels = { Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
                 document.getElementById('peer-action-name').textContent = peer.name;
                 document.getElementById('peer-action-source').textContent = sourceLabels[peer.source] || peer.source;
-                // Update modal icon to match peer device type
                 const modalIcon = document.querySelector('#peer-action-icon i');
                 if (modalIcon) modalIcon.setAttribute('data-lucide', getDeviceIcon(peer.device_type));
+                // Show text-send button only if text is typed
+                const textBtn = document.getElementById('peer-action-text-btn');
+                const txt = selectedText.trim();
+                if (txt) {
+                    textBtn.classList.remove('hidden');
+                    document.getElementById('peer-action-text-preview').textContent = txt.length > 40 ? txt.slice(0, 40) + '…' : txt;
+                } else {
+                    textBtn.classList.add('hidden');
+                }
                 document.getElementById('peer-action-modal').classList.remove('hidden');
                 lucide.createIcons();
             }
@@ -1080,9 +1093,29 @@
             currentActionPeer = null;
         }
 
-        function peerActionSend() {
+        async function peerActionFileSelected(input) {
+            if (!input.files.length || !currentActionPeer) return;
+            const peer = currentActionPeer;
             closePeerAction();
-            showMessage('Wähle zuerst Dateien aus, dann tippe auf das Gerät.');
+            const files = Array.from(input.files);
+            const formData = new FormData();
+            files.forEach(f => formData.append('files', f));
+            formData.append('target_peer_id', peer.id);
+            if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
+            showMessage(`Sende an <b>${peer.name}</b>...`);
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                if (res.ok) showMessage(`<b>Erfolgreich gesendet!</b>`);
+                else showMessage(`Fehler beim Senden.`);
+            } catch(e) { showMessage(`Fehler.`); }
+            input.value = '';
+        }
+
+        function peerActionSendText() {
+            if (!currentActionPeer) return;
+            const peer = currentActionPeer;
+            closePeerAction();
+            startTextDrop(peer);
         }
 
 
