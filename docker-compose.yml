@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   lara:
-    image: l8tenever/lara:latest
+    image: ghcr.io/l8tenever/lara:latest
     ports:
       - "80:8000"
     volumes:
