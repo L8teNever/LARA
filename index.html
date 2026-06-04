@@ -762,8 +762,15 @@
             document.getElementById('user-name-input').value = myName;
 
             // Update center radar icon to match own device type
-            const centerIcon = document.querySelector('#radar-container .z-10 i[data-lucide="smartphone"]');
+            const centerIcon = document.querySelector('#radar-container .z-10 i');
             if (centerIcon) { centerIcon.setAttribute('data-lucide', getDeviceIcon(myDeviceInfo.type)); lucide.createIcons(); }
+
+            // Re-detect on window resize (desktop users resizing browser)
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(updateOwnDeviceIcon, 300);
+            });
 
             // Geolocation: watchPosition for continuous updates + IP fallback
             if ("geolocation" in navigator) {
@@ -972,23 +979,40 @@
         function detectDeviceType() {
             const ua = navigator.userAgent;
             const touch = navigator.maxTouchPoints > 1;
-            const w = screen.width;
+            const w = window.innerWidth;
 
             let os = 'unknown';
-            if (/android/i.test(ua))              os = 'android';
+            if (/android/i.test(ua))               os = 'android';
             else if (/iphone|ipad|ipod/i.test(ua)) os = 'ios';
             else if (/windows/i.test(ua))          os = 'windows';
             else if (/mac os x/i.test(ua))         os = 'macos';
             else if (/linux/i.test(ua))            os = 'linux';
 
-            let type = 'desktop';
-            if (/iphone/i.test(ua))                              type = 'phone';
-            else if (/ipad/i.test(ua))                           type = 'tablet';
-            else if (os === 'android' && touch && w < 768)       type = 'phone';
-            else if (os === 'android' && touch)                  type = 'tablet';
-            else if (touch && w < 600)                           type = 'phone';
+            let type;
+            // UA-based hard signals first (phones/tablets have no window resize)
+            if (/iphone/i.test(ua))                        type = 'phone';
+            else if (/ipad/i.test(ua))                     type = 'tablet';
+            else if (os === 'android' && touch && w < 768) type = 'phone';
+            else if (os === 'android' && touch)            type = 'tablet';
+            else {
+                // Desktop / unknown → use window width as primary signal
+                if (w < 600)       type = 'phone';
+                else if (w < 1024) type = 'tablet';
+                else               type = 'desktop';
+            }
 
             return { type, os };
+        }
+
+        function updateOwnDeviceIcon() {
+            myDeviceInfo = detectDeviceType();
+            const centerIcon = document.querySelector('#radar-container .z-10 i');
+            if (centerIcon) {
+                centerIcon.setAttribute('data-lucide', getDeviceIcon(myDeviceInfo.type));
+                lucide.createIcons();
+            }
+            // Re-register so other peers see the updated device_type
+            registerMe();
         }
 
         function getDeviceIcon(deviceType) {
