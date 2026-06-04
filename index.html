@@ -722,7 +722,10 @@
         localStorage.setItem('lara_peer_id', myId);
 
         document.addEventListener("DOMContentLoaded", () => {
-            if (!myName) { document.getElementById('name-modal').style.display = 'flex'; } else { initApp(); }
+            if (!myName) {
+                document.getElementById('name-modal').style.display = 'flex';
+                document.getElementById('initial-name-input').value = generateRandomName();
+            } else { initApp(); }
         });
 
         const RANDOM_PREFIXES = ['Neon', 'Turbo', 'Cyber', 'Flash', 'Nova', 'Pixel', 'Solar', 'Hyper', 'Ultra', 'Blitz', 'Ghost', 'Storm', 'Comet', 'Quantum', 'Astro', 'Laser', 'Sonic', 'Titan', 'Volt', 'Drift'];
@@ -746,8 +749,8 @@
         }
 
         function saveInitialName() {
-            const val = document.getElementById('initial-name-input').value.trim();
-            if (val) { localStorage.setItem('lara_peer_name', val); myName = val; document.getElementById('name-modal').style.display = 'none'; initApp(); }
+            const val = document.getElementById('initial-name-input').value.trim() || generateRandomName();
+            localStorage.setItem('lara_peer_name', val); myName = val; document.getElementById('name-modal').style.display = 'none'; initApp();
         }
 
         function updateGeoStatus(text, color) {
