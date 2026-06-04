@@ -26,9 +26,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -81,8 +78,6 @@ class shared_bundle(BaseModel):
     expires_at: float
     is_public: bool = False
     access_token: Optional[str] = None
-    sender_public_key: Optional[str] = None  # E2E encryption: sender's ECDH public key
-    encrypted: Optional[str] = None          # "true" if files are AES-GCM encrypted
 
 class Peer(BaseModel):
     id: str
@@ -93,12 +88,6 @@ class Peer(BaseModel):
     coord_source: Optional[str] = None  # "gps" or "ip"
     last_seen: float
     source: Optional[str] = None  # Discovery source: 'Network' or 'Location'
-    device_type: Optional[str] = None  # 'phone', 'tablet', 'desktop'
-    device_os: Optional[str] = None    # 'android', 'ios', 'windows', 'macos', 'linux'
-    public_key: Optional[str] = None   # ECDH P-256 SPKI public key (base64) for E2E encryption
-
-    class Config:
-        extra = "ignore"
 
 files_metadata: List[shared_bundle] = []
 active_peers: List[Peer] = []
@@ -183,9 +172,7 @@ async def upload_file(
     is_public: bool = Form(False),
     expires_in: int = Form(1),
     uploader_name: Optional[str] = Form(None),
-    target_peer_id: Optional[str] = Form(None),
-    sender_public_key: Optional[str] = Form(None),
-    encrypted: Optional[str] = Form(None)
+    target_peer_id: Optional[str] = Form(None)
 ):
     bundle_id = str(uuid.uuid4())
     bundle_files = []
@@ -248,9 +235,7 @@ async def upload_file(
         timestamp=now,
         expires_at=now + (expires_in * 3600),
         is_public=is_public,
-        access_token=access_token,
-        sender_public_key=sender_public_key,
-        encrypted=encrypted
+        access_token=access_token
     )
     files_metadata.append(metadata)
     

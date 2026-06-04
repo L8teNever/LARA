@@ -352,10 +352,6 @@
                             </div>
                         </label>
                         <input type="file" id="file-input" multiple onchange="handleFileSelect(event)">
-                        <div id="pending-hint" class="hidden mt-2 px-4 py-2.5 bg-purple-600 text-white text-[11px] font-bold rounded-2xl flex items-center gap-2 animate-pulse">
-                            <i data-lucide="arrow-up" class="w-3.5 h-3.5 shrink-0"></i>
-                            <span id="pending-hint-text"></span>
-                        </div>
                     </section>
                     <section id="file-list-container" class="hidden flex flex-col">
                         <div class="flex items-center justify-between mb-3 sm:mb-4">
@@ -439,11 +435,29 @@
                     </div>
                     <div>
                         <h2 class="text-lg sm:text-xl font-bold">Eingehende Dateien</h2>
-                        <p class="text-xs sm:text-sm text-gray-500">Dateien die an dich gesendet wurden</p>
+                        <p class="text-xs sm:text-sm text-gray-500">Anfragen werden für 24 Stunden gespeichert</p>
                     </div>
                 </div>
                 <div id="incoming-container" class="space-y-3 sm:space-y-4">
                     <p class="text-center text-gray-400 py-10 sm:py-12 text-sm">Aktuell keine aktiven Anfragen.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION: VERLAUF / AKTIV -->
+        <div id="view-verlauf" class="view-section">
+            <div class="max-w-2xl mx-auto py-3 sm:py-4">
+                <div class="flex items-center gap-3 mb-4 sm:mb-6">
+                    <div class="p-2.5 sm:p-3 bg-purple-100 text-purple-700 rounded-xl sm:rounded-2xl">
+                        <i data-lucide="history" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold">Aktivitäten</h2>
+                        <p class="text-xs sm:text-sm text-gray-500">Deine aktuellen Freigaben und letzten Aktionen</p>
+                    </div>
+                </div>
+                <div id="my-shares-list" class="space-y-2 sm:space-y-3">
+                    <p class="text-center text-gray-400 py-10 sm:py-12 text-sm">Keine aktiven Freigaben gefunden.</p>
                 </div>
             </div>
         </div>
@@ -453,15 +467,20 @@
             <div class="max-w-2xl mx-auto py-3 sm:py-4">
                 <div class="flex items-center gap-3 mb-6 sm:mb-8">
                     <div class="p-2.5 sm:p-3 bg-purple-100 text-purple-700 rounded-xl sm:rounded-2xl">
-                        <i data-lucide="settings" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                        <i data-lucide="user" class="w-5 h-5 sm:w-6 sm:h-6"></i>
                     </div>
                     <div>
-                        <h2 class="text-lg sm:text-xl font-bold">Einstellungen</h2>
-                        <p class="text-xs sm:text-sm text-gray-500">Verbindung & Erkennung</p>
+                        <h2 class="text-lg sm:text-xl font-bold">Profileinstellungen</h2>
+                        <p class="text-xs sm:text-sm text-gray-500">Passe deine Sichtbarkeit in LARA an</p>
                     </div>
                 </div>
 
                 <div class="space-y-4 sm:space-y-6">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-[10px] sm:text-xs font-bold text-purple-600 uppercase tracking-widest px-1">Dein Gerätename</label>
+                        <input type="text" id="user-name-input" class="m3-input" placeholder="Mein Smartphone"
+                            oninput="updateUserName(this.value)">
+                    </div>
                     <div class="m3-card p-4 sm:p-6 flex items-center justify-between border border-white">
                         <div class="flex items-center gap-3 sm:gap-4">
                             <div class="p-2 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="map-pin"
@@ -584,6 +603,13 @@
                 </div>
                 <span class="text-[9px] sm:text-[10px] font-medium">Empfangen</span>
             </button>
+            <button onclick="switchView('verlauf')" class="nav-item flex flex-col items-center flex-1 transition-all"
+                id="nav-verlauf">
+                <div class="nav-pill px-4 sm:px-6 py-1 sm:py-1.5 rounded-full mb-0.5 sm:mb-1 transition-all">
+                    <i data-lucide="history" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                </div>
+                <span class="text-[9px] sm:text-[10px] font-medium">Verlauf</span>
+            </button>
         </nav>
     </div>
 
@@ -693,10 +719,6 @@
         let userCoords = { lat: null, lon: null, source: null }; // source: "gps" or "ip"
         let seenDropIds = new Set();
         let currentDropBundle = null;
-        let currentViewBundle = null;
-        let myKeyPair = null;
-        let myPublicKeyRaw = '';
-        const peerPublicKeys = new Map();
         localStorage.setItem('lara_peer_id', myId);
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -752,56 +774,7 @@
             return false;
         }
 
-        async function initCryptoKeys() {
-            if (!crypto.subtle) return;
-            const stored = localStorage.getItem('lara_ec_keypair');
-            if (stored) {
-                try {
-                    const { privateJwk, publicJwk } = JSON.parse(stored);
-                    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
-                    const pub  = await crypto.subtle.importKey('jwk', publicJwk,  { name: 'ECDH', namedCurve: 'P-256' }, true,  []);
-                    myKeyPair = { privateKey: priv, publicKey: pub };
-                } catch (e) { localStorage.removeItem('lara_ec_keypair'); }
-            }
-            if (!myKeyPair) {
-                myKeyPair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
-                const privateJwk = await crypto.subtle.exportKey('jwk', myKeyPair.privateKey);
-                const publicJwk  = await crypto.subtle.exportKey('jwk', myKeyPair.publicKey);
-                localStorage.setItem('lara_ec_keypair', JSON.stringify({ privateJwk, publicJwk }));
-            }
-            const spki = await crypto.subtle.exportKey('spki', myKeyPair.publicKey);
-            myPublicKeyRaw = btoa(String.fromCharCode(...new Uint8Array(spki)));
-        }
-
-        async function deriveAesKey(theirPubKeyBase64) {
-            const spkiBytes = Uint8Array.from(atob(theirPubKeyBase64), c => c.charCodeAt(0));
-            const theirKey = await crypto.subtle.importKey('spki', spkiBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-            return crypto.subtle.deriveKey(
-                { name: 'ECDH', public: theirKey },
-                myKeyPair.privateKey,
-                { name: 'AES-GCM', length: 256 },
-                false, ['encrypt', 'decrypt']
-            );
-        }
-
-        async function encryptFileData(file, aesKey) {
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const plaintext = await file.arrayBuffer();
-            const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, plaintext);
-            const combined = new Uint8Array(12 + ciphertext.byteLength);
-            combined.set(iv);
-            combined.set(new Uint8Array(ciphertext), 12);
-            return new File([combined], file.name, { type: file.type });
-        }
-
-        async function decryptData(encryptedArrayBuffer, aesKey) {
-            const bytes = new Uint8Array(encryptedArrayBuffer);
-            const iv = bytes.slice(0, 12);
-            const ciphertext = bytes.slice(12);
-            return crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ciphertext);
-        }
-
-        async function initApp() {
+        function initApp() {
             myDeviceInfo = detectDeviceType();
             document.getElementById('display-user-name').innerText = myName;
             document.getElementById('user-name-input').value = myName;
@@ -839,7 +812,6 @@
                 });
             }
 
-            try { await initCryptoKeys(); } catch(e) { console.warn('E2E-Verschlüsselung nicht verfügbar (kein HTTPS?):', e.message); }
             setInterval(registerMe, 5000); registerMe();
             setInterval(fetchPeers, 3000); fetchPeers();
             setInterval(refreshActivity, 4000); refreshActivity();
@@ -913,14 +885,10 @@
 
         async function registerMe() {
             if (!myName) return;
-            try {
-                await fetch('/api/peers/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-                    cache: 'no-store',
-                    body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os, public_key: myPublicKeyRaw })
-                });
-            } catch(e) { console.warn('registerMe:', e.message); }
+            await fetch('/api/peers/register', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os })
+            });
         }
 
         function getRadarRadius() {
@@ -936,9 +904,7 @@
         async function fetchPeers() {
             let url = `/api/peers/discover?peer_id=${encodeURIComponent(myId)}`;
             if (userCoords.lat) url += `&lat=${userCoords.lat}&lon=${userCoords.lon}&coord_source=${userCoords.source || 'gps'}`;
-            const res = await fetch(url, { cache: 'no-store' }); const peers = await res.json();
-            if (!Array.isArray(peers)) return;
-            peers.forEach(p => { if (p.public_key) peerPublicKeys.set(p.id, p.public_key); });
+            const res = await fetch(url); const peers = await res.json();
             const container = document.getElementById('nearby-peers-radar');
             const others = peers.filter(p => p.id !== myId);
             const newPeerIds = new Set(others.map(p => p.id));
@@ -1008,17 +974,6 @@
                     }
                 });
                 lucide.createIcons();
-                // Auto-trigger pending action
-                if (pendingTargetPeer) {
-                    const peer = pendingTargetPeer;
-                    clearPendingHint();
-                    startDrop(peer);
-                } else if (pendingAction === 'qr') {
-                    clearPendingHint();
-                    startGlobalShare();
-                }
-            } else {
-                clearPendingHint();
             }
         }
         function addFileToUI(file) {
@@ -1081,17 +1036,8 @@
             const text = selectedText.trim();
             if (!text) return;
             const blob = new Blob([text], { type: 'text/plain' });
-            let file = new File([blob], 'nachricht.txt', { type: 'text/plain' });
+            const file = new File([blob], 'nachricht.txt', { type: 'text/plain' });
             const formData = new FormData();
-            const theirKey = peerPublicKeys.get(target.id);
-            if (theirKey && myKeyPair) {
-                try {
-                    const aesKey = await deriveAesKey(theirKey);
-                    file = await encryptFileData(file, aesKey);
-                    formData.append('sender_public_key', myPublicKeyRaw);
-                    formData.append('encrypted', 'true');
-                } catch(e) { console.warn('Verschlüsselung fehlgeschlagen, sende unverschlüsselt.'); }
-            }
             formData.append('files', file);
             formData.append('target_peer_id', target.id);
             formData.append('uploader_name', myName);
@@ -1105,19 +1051,6 @@
         }
 
         let currentActionPeer = null;
-        let pendingTargetPeer = null;
-        let pendingAction = null;
-
-        function showPendingHint(msg) {
-            document.getElementById('pending-hint-text').innerHTML = msg;
-            document.getElementById('pending-hint').classList.remove('hidden');
-            lucide.createIcons();
-        }
-        function clearPendingHint() {
-            document.getElementById('pending-hint').classList.add('hidden');
-            pendingTargetPeer = null;
-            pendingAction = null;
-        }
 
         function onPeerClick(peer) {
             if (selectedFiles.length > 0) {
@@ -1125,10 +1058,16 @@
             } else if (selectedText.trim()) {
                 startTextDrop(peer);
             } else {
-                pendingTargetPeer = peer;
-                pendingAction = null;
-                showPendingHint(`Datei wählen → wird an <b>${peer.name}</b> gesendet`);
-                document.getElementById('file-input').click();
+                // No files/text → show action menu
+                currentActionPeer = peer;
+                const sourceLabels = { Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
+                document.getElementById('peer-action-name').textContent = peer.name;
+                document.getElementById('peer-action-source').textContent = sourceLabels[peer.source] || peer.source;
+                // Update modal icon to match peer device type
+                const modalIcon = document.querySelector('#peer-action-icon i');
+                if (modalIcon) modalIcon.setAttribute('data-lucide', getDeviceIcon(peer.device_type));
+                document.getElementById('peer-action-modal').classList.remove('hidden');
+                lucide.createIcons();
             }
         }
 
@@ -1146,16 +1085,7 @@
 
         async function startDrop(target) {
             if (selectedFiles.length === 0) { showMessage(`Wähle zuerst Dateien aus.`); return; }
-            const formData = new FormData();
-            const theirKey = peerPublicKeys.get(target.id);
-            if (theirKey && myKeyPair) {
-                try {
-                    const aesKey = await deriveAesKey(theirKey);
-                    for (const f of selectedFiles) formData.append('files', await encryptFileData(f, aesKey));
-                    formData.append('sender_public_key', myPublicKeyRaw);
-                    formData.append('encrypted', 'true');
-                } catch(e) { console.warn('Verschlüsselung fehlgeschlagen.'); selectedFiles.forEach(f => formData.append('files', f)); }
-            } else { selectedFiles.forEach(f => formData.append('files', f)); }
+            const formData = new FormData(); selectedFiles.forEach(f => formData.append('files', f));
             formData.append('target_peer_id', target.id); formData.append('uploader_name', myName);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
             showMessage(`Sende an <b>${target.name}</b>...`);
@@ -1163,13 +1093,7 @@
         }
 
         async function startGlobalShare() {
-            if (selectedFiles.length === 0) {
-                pendingTargetPeer = null;
-                pendingAction = 'qr';
-                showPendingHint('Datei wählen → QR-Code wird erstellt');
-                document.getElementById('file-input').click();
-                return;
-            }
+            if (selectedFiles.length === 0) { showMessage("Wähle zuerst Dateien aus."); return; }
             const formData = new FormData(); selectedFiles.forEach(f => formData.append('files', f));
             formData.append('is_public', true); formData.append('expires_in', 1);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
@@ -1189,7 +1113,7 @@
             let params = [`peer_id=${encodeURIComponent(myId)}`];
             if (userCoords.lat) { params.push(`lat=${userCoords.lat}`); params.push(`lon=${userCoords.lon}`); params.push(`coord_source=${userCoords.source || 'gps'}`); }
             let url = '/api/discover?' + params.join('&');
-            const res = await fetch(url, { cache: 'no-store' }); const shares = await res.json();
+            const res = await fetch(url); const shares = await res.json();
 
             // 1. Incoming Directed Drops — detect NEW ones for popup
             const incoming = shares.filter(s => s.target_peer_id === myId);
@@ -1248,7 +1172,30 @@
                 lucide.createIcons();
             }
 
-            // 2. Network Discovery
+            // 2. My Activity / Shares
+            const myShares = shares.filter(s => s.uploader_name === myName);
+            const mySharesList = document.getElementById('my-shares-list');
+            if (myShares.length > 0) {
+                mySharesList.innerHTML = '';
+                myShares.forEach(s => {
+                    const target = s.target_peer_id ? `Direkt-Drop` : `Öffentlich`;
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center justify-between p-3 sm:p-4 bg-white/60 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm';
+                    item.innerHTML = `
+                        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+                            <div class="p-1.5 sm:p-2 bg-green-50 rounded-lg sm:rounded-xl text-green-600 shrink-0"><i data-lucide="arrow-up-right" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
+                            <div class="min-w-0">
+                                <p class="text-xs sm:text-sm font-bold">${s.files.length} Datei(en)</p>
+                                <p class="text-[9px] sm:text-[10px] text-gray-400 truncate">An ${target} • ${timeAgo(s.timestamp)}</p>
+                            </div>
+                        </div>
+                        <span class="text-[9px] sm:text-[10px] font-bold text-green-600 bg-green-50 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full uppercase shrink-0">AKTIV</span>
+                    `;
+                    mySharesList.appendChild(item);
+                }); lucide.createIcons();
+            } else { mySharesList.innerHTML = '<p class="text-center text-gray-400 py-10 sm:py-12 text-sm">Keine aktiven Übertragungen.</p>'; }
+
+            // 3. Network Discovery
             const others = shares.filter(s => !s.target_peer_id && s.uploader_name !== myName);
             const nearbyList = document.getElementById('nearby-list');
             if (others.length > 0) {
@@ -1351,41 +1298,11 @@
             });
             showMessage(`<b>${fileIds.length} Dateien</b> werden heruntergeladen...`);
         }
-        async function previewFile(id, name, type) {
+        function previewFile(id, name, type) {
             const content = document.getElementById('preview-content'); const fileName = document.getElementById('preview-file-name');
             const fileMeta = document.getElementById('preview-file-meta'); const dlBtn = document.getElementById('preview-download-btn');
             fileName.innerText = name; fileMeta.innerText = type; dlBtn.style.display = 'block'; content.innerHTML = '<p class="text-purple-600 font-bold animate-pulse">Lade...</p>';
             let dlUrl = `/api/download/${id}`; if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-
-            const senderKey = currentViewBundle && currentViewBundle.encrypted === 'true' ? currentViewBundle.sender_public_key : null;
-            if (senderKey && myKeyPair) {
-                content.innerHTML = '<p class="text-purple-600 font-bold animate-pulse">Entschlüssele...</p>';
-                try {
-                    const aesKey = await deriveAesKey(senderKey);
-                    const decrypted = await decryptData(await (await fetch(dlUrl)).arrayBuffer(), aesKey);
-                    const blob = new Blob([decrypted], { type });
-                    const blobUrl = URL.createObjectURL(blob);
-                    dlBtn.onclick = () => { const a = document.createElement('a'); a.href = blobUrl; a.download = name; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
-                    if (type.startsWith('image/')) { content.innerHTML = `<img src="${blobUrl}" class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl border-4 border-white">`; }
-                    else if (type.startsWith('video/')) { content.innerHTML = `<video src="${blobUrl}" controls class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl"></video>`; }
-                    else if (type === 'application/pdf') { content.innerHTML = `<iframe src="${blobUrl}" class="w-full h-[50vh] sm:h-[60vh] border-none rounded-2xl sm:rounded-3xl bg-white shadow-inner"></iframe>`; }
-                    else if (type === 'text/plain') {
-                        const text = new TextDecoder().decode(decrypted);
-                        content.innerHTML = `<div class="w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-inner border border-gray-100">
-                            <pre class="text-sm text-gray-800 whitespace-pre-wrap break-words font-sans leading-relaxed">${escapeHtml(text)}</pre>
-                            <button class="mt-4 flex items-center gap-2 text-xs font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition-colors active:scale-95">
-                                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Text kopieren
-                            </button>
-                        </div>`;
-                        const btn = content.querySelector('button');
-                        if (btn) btn.onclick = () => navigator.clipboard.writeText(text).then(() => showMessage('<b>Text kopiert!</b>')).catch(() => {});
-                        lucide.createIcons();
-                    }
-                    else { content.innerHTML = `<div class="text-center p-8 sm:p-12 bg-white rounded-2xl sm:rounded-3xl shadow-inner"><i data-lucide="file-question" class="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-400"></i><p class="font-bold text-sm sm:text-base">Keine Vorschau möglich.</p></div>`; lucide.createIcons(); }
-                } catch(e) { content.innerHTML = `<p class="text-red-400 p-4 text-sm font-bold">Fehler beim Entschlüsseln.</p>`; }
-                return;
-            }
-
             dlBtn.onclick = () => window.open(dlUrl);
             if (type.startsWith('image/')) { content.innerHTML = `<img src="${dlUrl}" class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl border-4 border-white">`; }
             else if (type.startsWith('video/')) { content.innerHTML = `<video src="${dlUrl}" controls class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl"></video>`; }
@@ -1400,6 +1317,7 @@
                             <i data-lucide="copy" class="w-3.5 h-3.5"></i> Text kopieren
                         </button>
                     </div>`;
+                    // Fix clipboard call after render
                     const btn = content.querySelector('button');
                     if (btn) btn.onclick = () => navigator.clipboard.writeText(text).then(() => showMessage('<b>Text kopiert!</b>')).catch(() => {});
                     lucide.createIcons();
@@ -1426,21 +1344,12 @@
 
                 const f = bundle.files[0];
                 let fetchedText = '';
-                const _isEnc = bundle.encrypted === 'true';
-                (async () => {
-                    try {
-                        const r = await fetch(`/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`);
-                        let text;
-                        if (_isEnc && bundle.sender_public_key && myKeyPair) {
-                            const aesKey = await deriveAesKey(bundle.sender_public_key);
-                            text = new TextDecoder().decode(await decryptData(await r.arrayBuffer(), aesKey));
-                        } else { text = await r.text(); }
-                        fetchedText = text;
-                        listEl.innerHTML = `<div class="p-3 bg-purple-50 rounded-xl border border-purple-100">
-                            <p class="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed max-h-[120px] overflow-y-auto">${escapeHtml(text)}</p>
-                        </div>`;
-                    } catch(e) { listEl.innerHTML = `<p class="text-xs text-red-400 p-3">Fehler beim Entschlüsseln.</p>`; }
-                })();
+                fetch(`/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`).then(r => r.text()).then(text => {
+                    fetchedText = text;
+                    listEl.innerHTML = `<div class="p-3 bg-purple-50 rounded-xl border border-purple-100">
+                        <p class="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed max-h-[120px] overflow-y-auto">${escapeHtml(text)}</p>
+                    </div>`;
+                }).catch(() => {});
 
                 acceptBtn.innerHTML = `<i data-lucide="copy" class="w-4 h-4"></i> Kopieren`;
                 acceptBtn.onclick = () => {
@@ -1469,36 +1378,22 @@
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
 
-        async function acceptDrop() {
+        function acceptDrop() {
             document.getElementById('drop-notification').classList.add('hidden');
             if (currentDropBundle) {
-                const bundle = currentDropBundle;
-                currentDropBundle = null;
-                if (bundle.files.length === 1) {
-                    const f = bundle.files[0];
+                if (currentDropBundle.files.length === 1) {
+                    // Single file → download immediately
+                    const f = currentDropBundle.files[0];
                     let dlUrl = `/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`;
                     if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
-                    if (bundle.encrypted === 'true' && bundle.sender_public_key && myKeyPair) {
-                        try {
-                            showMessage(`<b>${f.filename}</b> wird entschlüsselt...`);
-                            const aesKey = await deriveAesKey(bundle.sender_public_key);
-                            const decrypted = await decryptData(await (await fetch(dlUrl)).arrayBuffer(), aesKey);
-                            const blobUrl = URL.createObjectURL(new Blob([decrypted], { type: f.content_type }));
-                            const a = document.createElement('a'); a.href = blobUrl; a.download = f.filename; a.style.display = 'none';
-                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                            showMessage(`<b>${f.filename}</b> heruntergeladen.`);
-                        } catch(e) { showMessage('Fehler beim Entschlüsseln.'); }
-                    } else {
-                        const a = document.createElement('a'); a.href = dlUrl; a.download = f.filename; a.style.display = 'none';
-                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                        showMessage(`<b>${f.filename}</b> wird heruntergeladen...`);
-                    }
+                    const a = document.createElement('a'); a.href = dlUrl; a.download = f.filename; a.style.display = 'none';
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    showMessage(`<b>${f.filename}</b> wird heruntergeladen...`);
                 } else {
                     // Multiple files → show preview with download-all
-                    currentViewBundle = bundle;
-                    showBundlePreview(bundle);
+                    showBundlePreview(currentDropBundle);
                 }
+                currentDropBundle = null;
             }
         }
 
