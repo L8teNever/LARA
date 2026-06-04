@@ -279,8 +279,15 @@
         </div>
         <h2 class="text-xl sm:text-2xl font-bold mb-2 text-center">Willkommen bei LARA</h2>
         <p class="text-sm text-gray-500 mb-6 sm:mb-8 text-center max-w-[280px]">Wähle einen Namen, damit dich andere in der Nähe finden können.</p>
-        <div class="w-full max-w-sm space-y-4 px-4">
-            <input type="text" id="initial-name-input" placeholder="Dein Name (z.B. Pixel 9)" class="m3-input text-lg">
+        <div class="w-full max-w-sm space-y-3 px-4">
+            <div class="relative">
+                <input type="text" id="initial-name-input" placeholder="Dein Name (z.B. Pixel 9)" class="m3-input text-lg pr-12">
+                <button onclick="fillRandomName()" title="Zufälliger Name"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-purple-400 hover:text-purple-600 hover:bg-purple-100 rounded-xl transition-all active:scale-90">
+                    <i data-lucide="shuffle" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-[11px] text-gray-400 text-center">oder <button onclick="fillRandomName()" class="text-purple-500 font-bold hover:underline">zufälligen Namen würfeln</button></p>
             <button onclick="saveInitialName()"
                 class="w-full py-3.5 sm:py-4 bg-purple-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-100 active:scale-95 transition-transform">Starten</button>
         </div>
@@ -717,6 +724,26 @@
         document.addEventListener("DOMContentLoaded", () => {
             if (!myName) { document.getElementById('name-modal').style.display = 'flex'; } else { initApp(); }
         });
+
+        const RANDOM_PREFIXES = ['Neon', 'Turbo', 'Cyber', 'Flash', 'Nova', 'Pixel', 'Solar', 'Hyper', 'Ultra', 'Blitz', 'Ghost', 'Storm', 'Comet', 'Quantum', 'Astro', 'Laser', 'Sonic', 'Titan', 'Volt', 'Drift'];
+        const RANDOM_ANIMALS  = ['Panda', 'Fuchs', 'Adler', 'Tiger', 'Pinguin', 'Delfin', 'Löwe', 'Wolf', 'Bär', 'Falke', 'Luchs', 'Gecko', 'Waschbär', 'Otter', 'Gepard', 'Salamander', 'Albatros', 'Kolibri', 'Igel', 'Krähe'];
+
+        function generateRandomName() {
+            const p = RANDOM_PREFIXES[Math.floor(Math.random() * RANDOM_PREFIXES.length)];
+            const a = RANDOM_ANIMALS[Math.floor(Math.random() * RANDOM_ANIMALS.length)];
+            return `${p} ${a}`;
+        }
+
+        function fillRandomName() {
+            const name = generateRandomName();
+            const input = document.getElementById('initial-name-input');
+            input.value = name;
+            input.focus();
+            // Kleine Animation damit man sieht dass sich was geändert hat
+            input.style.transition = 'background 0.15s';
+            input.style.background = '#f3e8ff';
+            setTimeout(() => { input.style.background = ''; }, 300);
+        }
 
         function saveInitialName() {
             const val = document.getElementById('initial-name-input').value.trim();
