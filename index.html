@@ -509,19 +509,6 @@
                         </div>
                     </div>
 
-                    <!-- Account Link -->
-                    <a href="javascript:void(0)" onclick="window.open(`${ACCOUNT_URL}?peer_id=${encodeURIComponent(myId)}&name=${encodeURIComponent(myName)}`, '_blank')"
-                       class="m3-card p-4 sm:p-6 border border-white flex items-center justify-between cursor-pointer hover:shadow-md transition-shadow block no-underline">
-                        <div class="flex items-center gap-3 sm:gap-4">
-                            <div class="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="shield-check"
-                                    class="w-5 h-5 sm:w-6 sm:h-6"></i></div>
-                            <div>
-                                <p class="font-bold text-sm sm:text-base text-gray-900">Account & Kontakte</p>
-                                <p class="text-xs text-gray-400">Geräte & Kontakte dauerhaft speichern</p>
-                            </div>
-                        </div>
-                        <div class="text-gray-400"><i data-lucide="external-link" class="w-4 h-4"></i></div>
-                    </a>
 
                     <!-- Manual Pairing -->
                     <div class="m3-card p-4 sm:p-6 border border-white">
@@ -681,10 +668,6 @@
                     <div class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0"><i data-lucide="send" class="w-4 h-4"></i></div>
                     <div class="text-left"><span class="block">Dateien senden</span><span class="text-[10px] font-normal text-white/70">Wähle zuerst Dateien aus</span></div>
                 </button>
-                <button id="peer-action-save" onclick="peerActionSaveContact()" class="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-sm flex items-center gap-3 px-5 transition-all active:scale-[0.97]">
-                    <div class="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0"><i data-lucide="star" class="w-4 h-4"></i></div>
-                    <div class="text-left"><span class="block">Kontakt speichern</span><span class="text-[10px] font-normal text-white/70">Dauerhaft im Radar anzeigen</span></div>
-                </button>
                 <button onclick="closePeerAction()" class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-2xl font-semibold text-sm transition-all active:scale-[0.97] mt-1">
                     Abbrechen
                 </button>
@@ -778,7 +761,6 @@
             setInterval(registerMe, 5000); registerMe();
             setInterval(fetchPeers, 3000); fetchPeers();
             setInterval(refreshActivity, 4000); refreshActivity();
-            setInterval(checkContactRequests, 10000); checkContactRequests();
 
             // Auto-start ultrasonic if previously enabled
             if (localStorage.getItem('lara_sonic') === 'on') {
@@ -907,8 +889,8 @@
                 node.style.setProperty('--tx', x + 'px');
                 node.style.setProperty('--ty', y + 'px');
                 node.onclick = () => onPeerClick(p);
-                const color = p.source === 'Saved' ? 'bg-emerald-500' : p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
-                const icon = p.source === 'Saved' ? 'star' : p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
+                const color = p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
+                const icon = p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
                 node.innerHTML = `
                     <div class="relative w-11 h-11 sm:w-14 sm:h-14 ${color} rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform">
                         <i data-lucide="smartphone" class="w-5 h-5 sm:w-6 sm:h-6"></i>
@@ -952,7 +934,6 @@
         function clearFiles() { selectedFiles = []; document.getElementById('file-list').innerHTML = ''; document.getElementById('file-list-container').classList.add('hidden'); }
 
         let currentActionPeer = null;
-        const ACCOUNT_URL = 'https://account-drop.l8tenever.com';
 
         function onPeerClick(peer) {
             if (selectedFiles.length > 0) {
@@ -961,11 +942,9 @@
             } else {
                 // No files → show action menu
                 currentActionPeer = peer;
-                const sourceLabels = { Saved: 'Gespeicherter Kontakt', Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
+                const sourceLabels = { Manual: 'Manuell verbunden', Ultrasonic: 'Ultraschall', Network: 'Gleiches WLAN', Location: 'In der Nähe' };
                 document.getElementById('peer-action-name').textContent = peer.name;
                 document.getElementById('peer-action-source').textContent = sourceLabels[peer.source] || peer.source;
-                // If already saved, hide save button
-                document.getElementById('peer-action-save').style.display = peer.source === 'Saved' ? 'none' : 'flex';
                 document.getElementById('peer-action-modal').classList.remove('hidden');
                 lucide.createIcons();
             }
@@ -981,84 +960,7 @@
             showMessage('Wähle zuerst Dateien aus, dann tippe auf das Gerät.');
         }
 
-        async function peerActionSaveContact() {
-            if (!currentActionPeer) return;
-            const target = currentActionPeer;
-            closePeerAction();
 
-            try {
-                const res = await fetch('/api/contacts/request', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ my_peer_id: myId, target_peer_id: target.id })
-                });
-                if (res.ok) {
-                    showMessage(`Kontaktanfrage an <b>${target.name}</b> gesendet!`);
-                } else {
-                    const err = await res.json();
-                    showMessage(err.detail || 'Fehler beim Speichern.');
-                }
-            } catch (e) {
-                showMessage('Fehler beim Speichern.');
-            }
-        }
-
-        let seenContactRequestIds = new Set();
-        async function checkContactRequests() {
-            try {
-                const res = await fetch(`/api/contacts/pending?peer_id=${encodeURIComponent(myId)}`);
-                if (!res.ok) return;
-                const requests = await res.json();
-                for (const r of requests) {
-                    if (seenContactRequestIds.has(r.id)) continue;
-                    seenContactRequestIds.add(r.id);
-                    showContactRequestNotification(r);
-                }
-            } catch (e) {}
-        }
-
-        function showContactRequestNotification(req) {
-            const name = req.requester_name || req.requester_email;
-            const content = document.getElementById('modal-content');
-            content.innerHTML = `
-                <div class="mb-4">
-                    <div class="w-14 h-14 bg-amber-100 rounded-2xl mx-auto mb-3 flex items-center justify-center">
-                        <i data-lucide="user-plus" class="w-7 h-7 text-amber-600"></i>
-                    </div>
-                    <h3 class="text-lg font-bold mb-1">Kontaktanfrage</h3>
-                    <p class="text-sm text-gray-500"><b>${name}</b> möchte dich als Kontakt speichern</p>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="rejectContactRequest(${req.id})" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-sm">Ablehnen</button>
-                    <button onclick="acceptContactRequest(${req.id})" class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-sm shadow-lg">Annehmen</button>
-                </div>
-            `;
-            document.getElementById('modal-backdrop').classList.remove('hidden');
-            document.querySelector('#modal-backdrop .bg-white button[onclick="closeModal()"]').style.display = 'none';
-            lucide.createIcons();
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        }
-
-        async function acceptContactRequest(id) {
-            try {
-                await fetch(`/api/contacts/${id}/accept`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ peer_id: myId })
-                });
-                showMessage('Kontakt akzeptiert!');
-            } catch (e) { showMessage('Fehler'); }
-            closeModal();
-            document.querySelector('#modal-backdrop .bg-white button[onclick="closeModal()"]').style.display = '';
-        }
-
-        async function rejectContactRequest(id) {
-            try {
-                await fetch(`/api/contacts/${id}?peer_id=${encodeURIComponent(myId)}`, { method: 'DELETE' });
-                showMessage('Anfrage abgelehnt');
-            } catch (e) { showMessage('Fehler'); }
-            closeModal();
-            document.querySelector('#modal-backdrop .bg-white button[onclick="closeModal()"]').style.display = '';
-        }
 
         async function startDrop(target) {
             if (selectedFiles.length === 0) { showMessage(`Wähle zuerst Dateien aus.`); return; }

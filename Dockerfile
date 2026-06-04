@@ -9,7 +9,7 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p uploads && chmod 777 uploads
 
-EXPOSE 8000 8001
+EXPOSE 8000
 
 RUN chmod +x start.sh
 
