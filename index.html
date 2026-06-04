@@ -349,7 +349,9 @@
                         <div class="radar-pulse" style="animation-delay: 3s;"></div>
                         <div class="z-10 flex flex-col items-center"
                             style="background:white; padding: 20px 24px; border-radius: 28px; box-shadow: 0 8px 32px rgba(103,80,164,0.18), 0 2px 8px rgba(103,80,164,0.10); border: 2px solid var(--md-primary-container);">
-                            <i data-lucide="smartphone" class="w-9 h-9 sm:w-11 sm:h-11 lg:w-12 lg:h-12 mb-2" style="color:var(--md-primary)"></i>
+                            <div id="own-device-icon-wrap" class="w-9 h-9 sm:w-11 sm:h-11 lg:w-12 lg:h-12 mb-2 flex items-center justify-center" style="color:var(--md-primary)">
+                                <i data-lucide="smartphone" class="w-full h-full"></i>
+                            </div>
                             <span id="display-user-name"
                                 class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-center max-w-[88px] sm:max-w-none truncate"
                                 style="color:var(--md-primary)">MEIN GERÄT</span>
@@ -846,8 +848,7 @@
             document.getElementById('user-name-input').value = myName;
 
             // Update center radar icon to match own device type
-            const centerIcon = document.querySelector('#radar-container .z-10 i');
-            if (centerIcon) { centerIcon.setAttribute('data-lucide', getDeviceIcon(myDeviceInfo.type)); lucide.createIcons(); }
+            setOwnDeviceIcon(myDeviceInfo.type);
 
             // Re-detect on window resize (desktop users resizing browser)
             let resizeTimer;
@@ -998,33 +999,47 @@
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * (radius * 0.7);
 
+                const sourceColor = p.source === 'Manual' ? '#2E7D32' : p.source === 'Ultrasonic' ? '#E65100' : p.source === 'Network' ? '#1565C0' : '#6A1B9A';
+                const badgeIcon = p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
+                const deviceIcon = getDeviceIcon(p.device_type);
+
                 let node = container.querySelector(`[data-peer-id="${p.id}"]`);
                 if (node && !node.classList.contains('removing')) {
-                    // Smoothly update position of existing peer
+                    // Update position smoothly
                     node.style.setProperty('--tx', x + 'px');
                     node.style.setProperty('--ty', y + 'px');
                     node.style.transform = `translate(${x}px, ${y}px)`;
                     node.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                    // Update device icon if changed
+                    const iconWrap = node.querySelector('.peer-device-icon');
+                    if (iconWrap && iconWrap.dataset.currentIcon !== deviceIcon) {
+                        iconWrap.dataset.currentIcon = deviceIcon;
+                        iconWrap.innerHTML = `<i data-lucide="${deviceIcon}" class="w-5 h-5"></i>`;
+                        lucide.createIcons();
+                    }
                     return;
                 }
 
-                // Create new peer node with animation
                 node = document.createElement('div');
                 node.className = 'device-node';
                 node.dataset.peerId = p.id;
                 node.style.setProperty('--tx', x + 'px');
                 node.style.setProperty('--ty', y + 'px');
                 node.onclick = () => onPeerClick(p);
-                const color = p.source === 'Manual' ? 'bg-green-500' : p.source === 'Ultrasonic' ? 'bg-orange-500' : p.source === 'Network' ? 'bg-blue-500' : 'bg-pink-500';
-                const icon = p.source === 'Manual' ? 'link' : p.source === 'Ultrasonic' ? 'radio' : p.source === 'Network' ? 'wifi' : 'map-pin';
-                const deviceIcon = getDeviceIcon(p.device_type);
                 node.innerHTML = `
-                    <div class="relative w-11 h-11 sm:w-14 sm:h-14 ${color} rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform">
-                        <i data-lucide="${deviceIcon}" class="w-5 h-5 sm:w-6 sm:h-6"></i>
-                        <div class="connection-badge ${color} p-0.5 sm:p-1 rounded-full border-2 border-white"><i data-lucide="${icon}" class="w-2 h-2 sm:w-2.5 sm:h-2.5"></i></div>
+                    <div class="relative flex items-center justify-center rounded-[18px] shadow-lg transition-transform"
+                        style="width:48px;height:48px;background:${sourceColor};color:white;">
+                        <div class="peer-device-icon flex items-center justify-center" data-current-icon="${deviceIcon}">
+                            <i data-lucide="${deviceIcon}" class="w-5 h-5"></i>
+                        </div>
+                        <div class="connection-badge rounded-full flex items-center justify-center"
+                            style="background:${sourceColor};width:16px;height:16px;border:2px solid white;position:absolute;top:-5px;right:-5px;">
+                            <i data-lucide="${badgeIcon}" style="width:8px;height:8px;"></i>
+                        </div>
                     </div>
-                    <div class="mt-1.5 sm:mt-2 bg-white/90 backdrop-blur px-1.5 sm:px-2 py-0.5 rounded-full shadow-sm border text-center">
-                        <span class="text-[8px] sm:text-[9px] font-bold text-gray-800 truncate block max-w-[56px] sm:max-w-[72px]">${p.name}</span>
+                    <div class="mt-2 px-2 py-0.5 rounded-full text-center"
+                        style="background:rgba(255,255,255,0.92);backdrop-filter:blur(8px);box-shadow:0 1px 6px rgba(0,0,0,0.10);border:1px solid rgba(202,196,208,0.5);">
+                        <span style="font-size:8px;font-weight:700;color:#1C1B1F;white-space:nowrap;max-width:72px;display:block;overflow:hidden;text-overflow:ellipsis;">${p.name}</span>
                     </div>
                 `;
                 container.appendChild(node);
@@ -1093,14 +1108,17 @@
             return { type, os };
         }
 
+        function setOwnDeviceIcon(deviceType) {
+            const wrap = document.getElementById('own-device-icon-wrap');
+            if (!wrap) return;
+            const iconName = getDeviceIcon(deviceType);
+            wrap.innerHTML = `<i data-lucide="${iconName}" class="w-full h-full"></i>`;
+            lucide.createIcons();
+        }
+
         function updateOwnDeviceIcon() {
             myDeviceInfo = detectDeviceType();
-            const centerIcon = document.querySelector('#radar-container .z-10 i');
-            if (centerIcon) {
-                centerIcon.setAttribute('data-lucide', getDeviceIcon(myDeviceInfo.type));
-                lucide.createIcons();
-            }
-            // Re-register so other peers see the updated device_type
+            setOwnDeviceIcon(myDeviceInfo.type);
             registerMe();
         }
 
