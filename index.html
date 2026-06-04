@@ -444,24 +444,6 @@
             </div>
         </div>
 
-        <!-- SECTION: VERLAUF / AKTIV -->
-        <div id="view-verlauf" class="view-section">
-            <div class="max-w-2xl mx-auto py-3 sm:py-4">
-                <div class="flex items-center gap-3 mb-4 sm:mb-6">
-                    <div class="p-2.5 sm:p-3 bg-purple-100 text-purple-700 rounded-xl sm:rounded-2xl">
-                        <i data-lucide="history" class="w-5 h-5 sm:w-6 sm:h-6"></i>
-                    </div>
-                    <div>
-                        <h2 class="text-lg sm:text-xl font-bold">Aktivitäten</h2>
-                        <p class="text-xs sm:text-sm text-gray-500">Deine aktuellen Freigaben und letzten Aktionen</p>
-                    </div>
-                </div>
-                <div id="my-shares-list" class="space-y-2 sm:space-y-3">
-                    <p class="text-center text-gray-400 py-10 sm:py-12 text-sm">Keine aktiven Freigaben gefunden.</p>
-                </div>
-            </div>
-        </div>
-
         <!-- SECTION: EINSTELLUNGEN -->
         <div id="view-einstellungen" class="view-section">
             <div class="max-w-2xl mx-auto py-3 sm:py-4">
@@ -603,12 +585,12 @@
                 </div>
                 <span class="text-[9px] sm:text-[10px] font-medium">Empfangen</span>
             </button>
-            <button onclick="switchView('verlauf')" class="nav-item flex flex-col items-center flex-1 transition-all"
-                id="nav-verlauf">
+            <button onclick="switchView('einstellungen')" class="nav-item flex flex-col items-center flex-1 transition-all"
+                id="nav-einstellungen-nav">
                 <div class="nav-pill px-4 sm:px-6 py-1 sm:py-1.5 rounded-full mb-0.5 sm:mb-1 transition-all">
-                    <i data-lucide="history" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                    <i data-lucide="settings" class="w-5 h-5 sm:w-6 sm:h-6"></i>
                 </div>
-                <span class="text-[9px] sm:text-[10px] font-medium">Verlauf</span>
+                <span class="text-[9px] sm:text-[10px] font-medium">Einstellungen</span>
             </button>
         </nav>
     </div>
@@ -866,7 +848,6 @@
                 // Auto-upload immediately so files are ready to be sent
                 const formData = new FormData();
                 files.forEach(f => formData.append('files', f));
-                formData.append('uploader_name', myName);
                 if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
 
                 showMessage(`<b>${files.length} Datei${files.length > 1 ? 'en' : ''}</b> wird hochgeladen...`);
@@ -1040,7 +1021,6 @@
             const formData = new FormData();
             formData.append('files', file);
             formData.append('target_peer_id', target.id);
-            formData.append('uploader_name', myName);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
             showMessage(`Sende Text an <b>${target.name}</b>...`);
             try {
@@ -1086,7 +1066,7 @@
         async function startDrop(target) {
             if (selectedFiles.length === 0) { showMessage(`Wähle zuerst Dateien aus.`); return; }
             const formData = new FormData(); selectedFiles.forEach(f => formData.append('files', f));
-            formData.append('target_peer_id', target.id); formData.append('uploader_name', myName);
+            formData.append('target_peer_id', target.id);
             if (userCoords.lat) { formData.append('lat', userCoords.lat); formData.append('lon', userCoords.lon); }
             showMessage(`Sende an <b>${target.name}</b>...`);
             try { const res = await fetch('/api/upload', { method: 'POST', body: formData }); if (res.ok) { showMessage(`<b>Erfolgreich!</b>`); clearFiles(); } else showMessage(`Fehler.`); } catch (e) { showMessage(`Fehler.`); }
@@ -1142,8 +1122,8 @@
                                 <i data-lucide="${firstIcon}" class="w-5 h-5"></i>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <p class="font-bold text-sm truncate">${s.uploader_name || 'Unbekannt'}</p>
-                                <p class="text-xs text-gray-500">${fileCount} Datei${fileCount > 1 ? 'en' : ''} · ${formatFileSize(totalSize)}</p>
+                                <p class="font-bold text-sm truncate">${fileCount} Datei${fileCount > 1 ? 'en' : ''}</p>
+                                <p class="text-xs text-gray-500">${formatFileSize(totalSize)}</p>
                             </div>
                             <span class="text-[9px] font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-full shrink-0 whitespace-nowrap">${timeLeft} Min.</span>
                         </div>
@@ -1172,31 +1152,8 @@
                 lucide.createIcons();
             }
 
-            // 2. My Activity / Shares
-            const myShares = shares.filter(s => s.uploader_name === myName);
-            const mySharesList = document.getElementById('my-shares-list');
-            if (myShares.length > 0) {
-                mySharesList.innerHTML = '';
-                myShares.forEach(s => {
-                    const target = s.target_peer_id ? `Direkt-Drop` : `Öffentlich`;
-                    const item = document.createElement('div');
-                    item.className = 'flex items-center justify-between p-3 sm:p-4 bg-white/60 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm';
-                    item.innerHTML = `
-                        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-                            <div class="p-1.5 sm:p-2 bg-green-50 rounded-lg sm:rounded-xl text-green-600 shrink-0"><i data-lucide="arrow-up-right" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
-                            <div class="min-w-0">
-                                <p class="text-xs sm:text-sm font-bold">${s.files.length} Datei(en)</p>
-                                <p class="text-[9px] sm:text-[10px] text-gray-400 truncate">An ${target} • ${timeAgo(s.timestamp)}</p>
-                            </div>
-                        </div>
-                        <span class="text-[9px] sm:text-[10px] font-bold text-green-600 bg-green-50 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full uppercase shrink-0">AKTIV</span>
-                    `;
-                    mySharesList.appendChild(item);
-                }); lucide.createIcons();
-            } else { mySharesList.innerHTML = '<p class="text-center text-gray-400 py-10 sm:py-12 text-sm">Keine aktiven Übertragungen.</p>'; }
-
-            // 3. Network Discovery
-            const others = shares.filter(s => !s.target_peer_id && s.uploader_name !== myName);
+            // 2. Network Discovery
+            const others = shares.filter(s => !s.target_peer_id);
             const nearbyList = document.getElementById('nearby-list');
             if (others.length > 0) {
                 nearbyList.innerHTML = '';
@@ -1212,8 +1169,8 @@
                             <i data-lucide="${firstIcon}" class="w-5 h-5"></i>
                         </div>
                         <div class="min-w-0 flex-1">
-                            <p class="text-xs font-bold truncate text-gray-900">${bundle.uploader_name || 'Unbekannt'}</p>
-                            <p class="text-[10px] text-gray-400 mt-0.5">${fileCount} Datei${fileCount > 1 ? 'en' : ''} · ${formatFileSize(totalSize)} · ${timeAgo(bundle.timestamp)}</p>
+                            <p class="text-xs font-bold truncate text-gray-900">${fileCount} Datei${fileCount > 1 ? 'en' : ''}</p>
+                            <p class="text-[10px] text-gray-400 mt-0.5">${formatFileSize(totalSize)} · ${timeAgo(bundle.timestamp)}</p>
                         </div>
                         <i data-lucide="chevron-right" class="w-4 h-4 text-gray-300 shrink-0"></i>
                     `;
@@ -1245,11 +1202,10 @@
             const modal = document.getElementById('preview-modal'); const content = document.getElementById('preview-content');
             const fileName = document.getElementById('preview-file-name'); const fileMeta = document.getElementById('preview-file-meta');
             const dlBtn = document.getElementById('preview-download-btn');
-            const sender = bundle.uploader_name || 'Unbekannt';
             const totalSize = bundle.files.reduce((sum, f) => sum + f.size, 0);
             const fileCount = bundle.files.length;
-            fileName.innerText = `Von ${sender}`;
-            fileMeta.innerText = `${fileCount} Datei${fileCount > 1 ? 'en' : ''} · ${formatFileSize(totalSize)}`;
+            fileName.innerText = `${fileCount} Datei${fileCount > 1 ? 'en' : ''}`;
+            fileMeta.innerText = formatFileSize(totalSize);
 
             // Download all button in header
             if (fileCount > 1) {
@@ -1327,12 +1283,11 @@
         }
         function showDropNotification(bundle) {
             currentDropBundle = bundle;
-            const sender = bundle.uploader_name || 'Unbekannt';
             const fileCount = bundle.files.length;
             const totalSize = bundle.files.reduce((sum, f) => sum + f.size, 0);
             const isTextDrop = fileCount === 1 && bundle.files[0].content_type === 'text/plain';
 
-            document.getElementById('drop-sender-name').textContent = sender;
+            document.getElementById('drop-sender-name').textContent = `${fileCount} Datei${fileCount > 1 ? 'en' : ''} eingegangen`;
             const listEl = document.getElementById('drop-file-list');
             const acceptBtn = document.getElementById('drop-accept-btn');
 

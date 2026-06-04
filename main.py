@@ -68,8 +68,7 @@ class file_entry(BaseModel):
 class shared_bundle(BaseModel):
     id: str
     files: List[file_entry]
-    uploader_ip: str
-    uploader_name: Optional[str] = None
+    uploader_subnet: str  # only first 3 octets, never returned to clients
     target_peer_id: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
@@ -171,7 +170,6 @@ async def upload_file(
     lon: Optional[float] = Form(None),
     is_public: bool = Form(False),
     expires_in: int = Form(1),
-    uploader_name: Optional[str] = Form(None),
     target_peer_id: Optional[str] = Form(None)
 ):
     bundle_id = str(uuid.uuid4())
@@ -216,6 +214,7 @@ async def upload_file(
     
     # Track coord source and apply IP fallback
     uploader_ip = get_client_ip(request)
+    uploader_subnet = ".".join(uploader_ip.split(".")[:3])
     upload_coord_source = "gps" if (lat is not None and lon is not None) else None
     if lat is None or lon is None:
         lat, lon = ip_to_coords(uploader_ip)
@@ -226,8 +225,7 @@ async def upload_file(
     metadata = shared_bundle(
         id=bundle_id,
         files=bundle_files,
-        uploader_ip=uploader_ip,
-        uploader_name=uploader_name,
+        uploader_subnet=uploader_subnet,
         target_peer_id=target_peer_id,
         lat=lat,
         lon=lon,
@@ -474,8 +472,7 @@ async def discover_files(
         is_nearby = False
 
         # 1. Matching Subnet (same WLAN)
-        f_subnet = ".".join(f.uploader_ip.split(".")[:-1])
-        if f_subnet == client_subnet:
+        if f.uploader_subnet == client_subnet:
             is_nearby = True
 
         # 2. Geolocation (dynamic radius based on coord source)
@@ -487,8 +484,8 @@ async def discover_files(
 
     # Sort by timestamp descending (newest first)
     nearby_files.sort(key=lambda x: x.timestamp, reverse=True)
-            
-    return nearby_files
+
+    return [b.dict(exclude={"uploader_subnet"}) for b in nearby_files]
 
 
 
@@ -533,12 +530,11 @@ async def download_file(request: Request, file_id: str, lat: Optional[float] = N
     elif not bundle.is_public:
         # Proximity check for non-public, non-targeted bundles
         client_ip = get_client_ip(request)
-        client_subnet = ".".join(client_ip.split(".")[:-1])
-        uploader_subnet = ".".join(bundle.uploader_ip.split(".")[:-1])
+        client_subnet = ".".join(client_ip.split(".")[:3])
 
         is_auth = False
         # 1. Same subnet
-        if client_subnet == uploader_subnet:
+        if client_subnet == bundle.uploader_subnet:
             is_auth = True
         # 2. Geolocation proximity
         elif lat is not None and lon is not None and bundle.lat is not None and bundle.lon is not None:
@@ -561,7 +557,7 @@ async def public_view(access_token: str):
     bundle = next((b for b in files_metadata if b.access_token == access_token), None)
     if not bundle or bundle.expires_at < time.time():
         raise HTTPException(status_code=404, detail="Invalid or expired link")
-    return bundle
+    return bundle.dict(exclude={"uploader_subnet"})
 
 async def cleanup_loop():
     while True:
