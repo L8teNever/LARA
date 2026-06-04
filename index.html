@@ -753,6 +753,7 @@
         }
 
         async function initCryptoKeys() {
+            if (!crypto.subtle) return;
             const stored = localStorage.getItem('lara_ec_keypair');
             if (stored) {
                 try {
@@ -838,7 +839,7 @@
                 });
             }
 
-            await initCryptoKeys();
+            try { await initCryptoKeys(); } catch(e) { console.warn('E2E-Verschlüsselung nicht verfügbar (kein HTTPS?):', e.message); }
             setInterval(registerMe, 5000); registerMe();
             setInterval(fetchPeers, 3000); fetchPeers();
             setInterval(refreshActivity, 4000); refreshActivity();
