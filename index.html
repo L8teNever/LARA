@@ -983,7 +983,7 @@
 
         function detectDeviceType() {
             const ua = navigator.userAgent;
-            const touch = navigator.maxTouchPoints > 1;
+            const hasTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
             const w = window.innerWidth;
 
             let os = 'unknown';
@@ -994,13 +994,18 @@
             else if (/linux/i.test(ua))            os = 'linux';
 
             let type;
-            // UA-based hard signals first (phones/tablets have no window resize)
-            if (/iphone/i.test(ua))                        type = 'phone';
-            else if (/ipad/i.test(ua))                     type = 'tablet';
-            else if (os === 'android' && touch && w < 768) type = 'phone';
-            else if (os === 'android' && touch)            type = 'tablet';
-            else {
-                // Desktop / unknown → use window width as primary signal
+            if (/iphone/i.test(ua)) {
+                type = 'phone';
+            } else if (/ipad/i.test(ua)) {
+                type = 'tablet';
+            } else if (os === 'android' && hasTouch) {
+                // Android: phone vs tablet by screen width
+                type = w < 768 ? 'phone' : 'tablet';
+            } else if (!hasTouch) {
+                // No touch input → always desktop, regardless of window size
+                type = 'desktop';
+            } else {
+                // Touch + non-mobile UA (Windows touch, Chrome OS, etc.)
                 if (w < 600)       type = 'phone';
                 else if (w < 1024) type = 'tablet';
                 else               type = 'desktop';
