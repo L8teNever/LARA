@@ -4,7 +4,10 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\(''main.py''\\).read\\(\\)\\); print\\(''OK''\\)\")",
       "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
       "Bash(node -e \"const fs=require\\('fs'\\); const html=fs.readFileSync\\('c:/Users/simon/Desktop/LARA/index.html','utf8'\\); const m=html.match\\(/<script>\\([\\\\s\\\\S]*?\\)<\\\\/script>/g\\); let ok=true; m && m.forEach\\(\\(s,i\\)=>{ try{ new Function\\(s.slice\\(8,-9\\)\\); }catch\\(e\\){ ok=false; console.log\\('Block',i,':',e.message\\); }}\\); console.log\\(ok?'Syntax OK':'Fehler gefunden'\\);\")",
-      "Bash(node -e \"const fs=require\\('fs'\\); const html=fs.readFileSync\\('c:/Users/simon/Desktop/LARA/index.html','utf8'\\); const m=html.match\\(/<script>\\([\\\\s\\\\S]*?\\)<\\\\/script>/g\\); let ok=true; m&&m.forEach\\(\\(s,i\\)=>{try{new Function\\(s.slice\\(8,-9\\)\\);}catch\\(e\\){ok=false;console.log\\('Block',i,':',e.message\\);}}\\); console.log\\(ok?'OK':'FEHLER'\\);\")"
+      "Bash(node -e \"const fs=require\\('fs'\\); const html=fs.readFileSync\\('c:/Users/simon/Desktop/LARA/index.html','utf8'\\); const m=html.match\\(/<script>\\([\\\\s\\\\S]*?\\)<\\\\/script>/g\\); let ok=true; m&&m.forEach\\(\\(s,i\\)=>{try{new Function\\(s.slice\\(8,-9\\)\\);}catch\\(e\\){ok=false;console.log\\('Block',i,':',e.message\\);}}\\); console.log\\(ok?'OK':'FEHLER'\\);\")",
+      "Bash(dir /s /b \"c:\\\\Users\\\\simon\\\\Desktop\\\\LARA\")",
+      "Bash(dir \"c:\\\\Users\\\\simon\\\\Desktop\\\\LARA\" /a)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('main.py OK'\\)\")"
     ]
   }
 }

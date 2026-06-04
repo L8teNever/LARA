@@ -918,7 +918,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
                     cache: 'no-store',
-                    body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os })
+                    body: JSON.stringify({ id: myId, name: myName, ip: '0.0.0.0', lat: userCoords.lat, lon: userCoords.lon, coord_source: userCoords.source, last_seen: 0, device_type: myDeviceInfo.type, device_os: myDeviceInfo.os, public_key: myPublicKeyRaw })
                 });
             } catch(e) { console.warn('registerMe:', e.message); }
         }
