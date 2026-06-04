@@ -1381,48 +1381,166 @@
             return 'file';
         }
 
+        function dlUrl(fileId) {
+            let u = `/api/download/${fileId}?peer_id=${encodeURIComponent(myId)}`;
+            if (userCoords.lat) u += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
+            return u;
+        }
+
+        function canPreviewType(type) {
+            return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/')
+                || type === 'application/pdf' || type === 'text/plain' || type.startsWith('text/');
+        }
+
         function showBundlePreview(bundle) {
-            const modal = document.getElementById('preview-modal'); const content = document.getElementById('preview-content');
-            const fileName = document.getElementById('preview-file-name'); const fileMeta = document.getElementById('preview-file-meta');
+            const modal = document.getElementById('preview-modal');
+            const content = document.getElementById('preview-content');
+            const fileName = document.getElementById('preview-file-name');
+            const fileMeta = document.getElementById('preview-file-meta');
             const dlBtn = document.getElementById('preview-download-btn');
             const totalSize = bundle.files.reduce((sum, f) => sum + f.size, 0);
             const fileCount = bundle.files.length;
+
             fileName.innerText = `${fileCount} Datei${fileCount > 1 ? 'en' : ''}`;
             fileMeta.innerText = formatFileSize(totalSize);
 
-            // Download all button in header
             if (fileCount > 1) {
                 dlBtn.style.display = 'flex';
                 dlBtn.innerHTML = `<i data-lucide="download" class="w-3.5 h-3.5"></i> Alle (${fileCount})`;
                 dlBtn.onclick = () => downloadAllFiles(bundle.files.map(f => f.id));
             } else if (fileCount === 1) {
                 const f = bundle.files[0];
-                let dlUrl = `/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`; if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
                 dlBtn.style.display = 'flex';
                 dlBtn.innerHTML = `<i data-lucide="download" class="w-3.5 h-3.5"></i> Laden`;
-                dlBtn.onclick = () => { const a = document.createElement('a'); a.href = dlUrl; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); };
+                dlBtn.onclick = () => { const a = document.createElement('a'); a.href = dlUrl(f.id); a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); };
             } else { dlBtn.style.display = 'none'; }
 
-            content.innerHTML = `<div class="w-full max-w-lg">
-                <div class="space-y-2">${bundle.files.map((f, idx) => {
-                let dlUrl = `/api/download/${f.id}?peer_id=${encodeURIComponent(myId)}`; if (userCoords.lat) dlUrl += `&lat=${userCoords.lat}&lon=${userCoords.lon}`;
-                const icon = getFileIcon(f.content_type);
-                const isImage = f.content_type.startsWith('image/');
-                const canPreview = isImage || f.content_type.startsWith('video/') || f.content_type === 'application/pdf';
-                const thumbnail = isImage ? `<img src="${dlUrl}" class="w-12 h-12 object-cover rounded-xl shrink-0 bg-gray-200" loading="lazy" />` :
-                    `<div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 shrink-0"><i data-lucide="${icon}" class="w-5 h-5"></i></div>`;
-                return `<div class="bg-white p-3 rounded-2xl border border-gray-100 flex items-center gap-3 hover:shadow-sm transition-shadow">
-                            ${thumbnail}
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs font-semibold truncate text-gray-900">${f.filename}</p>
-                                <p class="text-[10px] text-gray-400 mt-0.5">${formatFileSize(f.size)}</p>
+            // All-image bundle → gallery view
+            const images = bundle.files.filter(f => f.content_type.startsWith('image/'));
+            if (images.length === bundle.files.length && fileCount > 0) {
+                content.innerHTML = buildImageGallery(images);
+                modal.classList.remove('hidden'); lucide.createIcons(); return;
+            }
+
+            // Single file → auto-open inline preview
+            if (fileCount === 1) {
+                modal.classList.remove('hidden');
+                renderInlinePreview(bundle.files[0], content);
+                lucide.createIcons(); return;
+            }
+
+            // Mixed bundle → rich file list
+            content.innerHTML = `<div class="w-full max-w-lg px-1 py-2 space-y-2">
+                ${bundle.files.map(f => {
+                    const isImg = f.content_type.startsWith('image/');
+                    const canPrev = canPreviewType(f.content_type);
+                    const icon = getFileIcon(f.content_type);
+                    const thumb = isImg
+                        ? `<img src="${dlUrl(f.id)}" class="w-14 h-14 object-cover rounded-[14px] shrink-0 bg-gray-100" loading="lazy" style="min-width:56px">`
+                        : `<div class="w-14 h-14 rounded-[14px] flex items-center justify-center shrink-0" style="background:var(--md-surface-high);color:var(--md-primary)"><i data-lucide="${icon}" class="w-6 h-6"></i></div>`;
+                    return `<div class="flex items-center gap-3 p-3 rounded-[18px] transition-all" style="background:var(--md-surface-container);">
+                        ${thumb}
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold truncate" style="color:var(--md-on-surface)">${f.filename}</p>
+                            <p class="text-xs mt-0.5" style="color:var(--md-on-surface-var)">${formatFileSize(f.size)} · ${f.content_type.split('/')[1] || f.content_type}</p>
+                        </div>
+                        <div class="flex gap-1.5 shrink-0">
+                            ${canPrev ? `<button onclick="openFilePreview('${f.id}','${escapeHtml(f.filename)}','${f.content_type}')"
+                                class="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90"
+                                style="background:var(--md-secondary-container);color:var(--md-on-secondary-container)">
+                                <i data-lucide="eye" class="w-4 h-4"></i></button>` : ''}
+                            <a href="${dlUrl(f.id)}" download="${f.filename}"
+                                class="w-9 h-9 rounded-full flex items-center justify-center no-underline transition-all active:scale-90"
+                                style="background:var(--md-primary);color:white">
+                                <i data-lucide="download" class="w-4 h-4"></i></a>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+            modal.classList.remove('hidden'); lucide.createIcons();
+        }
+
+        function buildImageGallery(images) {
+            if (images.length === 1) {
+                return `<div class="flex items-center justify-center w-full h-full p-2">
+                    <img src="${dlUrl(images[0].id)}" class="max-w-full max-h-[65vh] rounded-[20px] shadow-xl object-contain" style="background:#f0f0f0">
+                </div>`;
+            }
+            // Multi-image: masonry-like grid
+            return `<div class="w-full p-3">
+                <div class="grid gap-2" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+                    ${images.map((f,i) => `
+                        <div class="relative rounded-[16px] overflow-hidden cursor-pointer active:scale-[0.97] transition-transform"
+                            style="aspect-ratio:1;background:var(--md-surface-high)"
+                            onclick="openFilePreview('${f.id}','${escapeHtml(f.filename)}','${f.content_type}')">
+                            <img src="${dlUrl(f.id)}" class="w-full h-full object-cover" loading="lazy">
+                            <div class="absolute bottom-0 left-0 right-0 px-2 py-1.5" style="background:linear-gradient(0deg,rgba(0,0,0,0.55),transparent)">
+                                <p class="text-white text-[10px] font-semibold truncate">${f.filename}</p>
                             </div>
-                            <div class="flex gap-1.5 shrink-0">
-                                ${canPreview ? `<button onclick="previewFile('${f.id}', '${f.filename}', '${f.content_type}')" class="p-2 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-xl transition-colors active:scale-95" title="Vorschau"><i data-lucide="eye" class="w-4 h-4"></i></button>` : ''}
-                                <a href="${dlUrl}" download="${f.filename}" class="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-sm transition-colors active:scale-95 no-underline" title="Herunterladen"><i data-lucide="download" class="w-4 h-4"></i></a>
-                            </div>
-                        </div>`;
-            }).join('')}</div></div>`;
+                        </div>`).join('')}
+                </div>
+            </div>`;
+        }
+
+        function renderInlinePreview(f, container) {
+            const url = dlUrl(f.id);
+            if (f.content_type.startsWith('image/')) {
+                container.innerHTML = `<div class="flex items-center justify-center w-full h-full p-2">
+                    <img src="${url}" class="max-w-full max-h-[65vh] rounded-[20px] shadow-xl object-contain" style="background:#f0f0f0">
+                </div>`;
+            } else if (f.content_type.startsWith('video/')) {
+                container.innerHTML = `<div class="w-full p-3 flex items-center justify-center">
+                    <video src="${url}" controls class="max-w-full max-h-[60vh] rounded-[20px] shadow-xl w-full" style="background:#000"></video>
+                </div>`;
+            } else if (f.content_type.startsWith('audio/')) {
+                container.innerHTML = `<div class="flex flex-col items-center gap-5 p-8">
+                    <div class="w-24 h-24 rounded-[28px] flex items-center justify-center" style="background:var(--md-primary-container);color:var(--md-primary)">
+                        <i data-lucide="music" class="w-10 h-10"></i>
+                    </div>
+                    <p class="text-sm font-semibold" style="color:var(--md-on-surface)">${escapeHtml(f.filename)}</p>
+                    <audio src="${url}" controls class="w-full max-w-sm" style="border-radius:12px"></audio>
+                </div>`; lucide.createIcons();
+            } else if (f.content_type === 'application/pdf') {
+                container.innerHTML = `<iframe src="${url}" class="w-full rounded-[16px]" style="height:62vh;border:none;background:white"></iframe>`;
+            } else if (f.content_type === 'text/plain' || f.content_type.startsWith('text/')) {
+                container.innerHTML = `<div class="w-full p-4 flex items-center justify-center" style="color:var(--md-on-surface-var)">Lade...</div>`;
+                fetch(url).then(r => r.text()).then(text => {
+                    container.innerHTML = `<div class="w-full max-w-2xl p-4">
+                        <div class="rounded-[18px] p-4 overflow-auto max-h-[58vh]" style="background:var(--md-surface-container)">
+                            <pre class="text-sm whitespace-pre-wrap break-words leading-relaxed font-mono" style="color:var(--md-on-surface)">${escapeHtml(text)}</pre>
+                        </div>
+                        <button id="copy-text-btn" class="btn-tonal mt-3 flex items-center gap-2 text-xs px-4 py-2">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Text kopieren
+                        </button>
+                    </div>`;
+                    const btn = container.querySelector('#copy-text-btn');
+                    if (btn) btn.onclick = () => navigator.clipboard.writeText(text).then(() => showMessage('<b>Kopiert!</b>')).catch(() => {});
+                    lucide.createIcons();
+                }).catch(() => { container.innerHTML = `<p class="text-sm p-8" style="color:var(--md-outline)">Fehler beim Laden.</p>`; });
+            } else {
+                container.innerHTML = `<div class="flex flex-col items-center gap-4 p-10">
+                    <div class="w-20 h-20 rounded-[24px] flex items-center justify-center" style="background:var(--md-surface-high);color:var(--md-on-surface-var)">
+                        <i data-lucide="${getFileIcon(f.content_type)}" class="w-9 h-9"></i>
+                    </div>
+                    <p class="font-bold text-sm" style="color:var(--md-on-surface)">${escapeHtml(f.filename)}</p>
+                    <p class="text-xs" style="color:var(--md-outline)">Vorschau für diesen Dateityp nicht verfügbar</p>
+                </div>`; lucide.createIcons();
+            }
+        }
+
+        function openFilePreview(id, name, type) {
+            const modal = document.getElementById('preview-modal');
+            const content = document.getElementById('preview-content');
+            const fileName = document.getElementById('preview-file-name');
+            const fileMeta = document.getElementById('preview-file-meta');
+            const dlBtn = document.getElementById('preview-download-btn');
+            fileName.innerText = name;
+            fileMeta.innerText = type.split('/')[1] || type;
+            dlBtn.style.display = 'flex';
+            dlBtn.innerHTML = `<i data-lucide="download" class="w-3.5 h-3.5"></i> Laden`;
+            dlBtn.onclick = () => { const a = document.createElement('a'); a.href = dlUrl(id); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+            content.innerHTML = `<div class="p-8 text-sm" style="color:var(--md-on-surface-var)">Lade...</div>`;
+            renderInlinePreview({ id, filename: name, content_type: type }, content);
             modal.classList.remove('hidden'); lucide.createIcons();
         }
 
@@ -1437,33 +1555,7 @@
             });
             showMessage(`<b>${fileIds.length} Dateien</b> werden heruntergeladen...`);
         }
-        function previewFile(id, name, type) {
-            const content = document.getElementById('preview-content'); const fileName = document.getElementById('preview-file-name');
-            const fileMeta = document.getElementById('preview-file-meta'); const dlBtn = document.getElementById('preview-download-btn');
-            fileName.innerText = name; fileMeta.innerText = type; dlBtn.style.display = 'block'; content.innerHTML = '<p class="text-purple-600 font-bold animate-pulse">Lade...</p>';
-            let dlUrl = `/api/download/${id}`; if (userCoords.lat) dlUrl += `?lat=${userCoords.lat}&lon=${userCoords.lon}`;
-            dlBtn.onclick = () => window.open(dlUrl);
-            if (type.startsWith('image/')) { content.innerHTML = `<img src="${dlUrl}" class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl border-4 border-white">`; }
-            else if (type.startsWith('video/')) { content.innerHTML = `<video src="${dlUrl}" controls class="max-w-full max-h-[50vh] sm:max-h-[60vh] rounded-2xl sm:rounded-3xl shadow-xl"></video>`; }
-            else if (type === 'application/pdf') { content.innerHTML = `<iframe src="${dlUrl}" class="w-full h-[50vh] sm:h-[60vh] border-none rounded-2xl sm:rounded-3xl bg-white shadow-inner"></iframe>`; }
-            else if (type === 'text/plain') {
-                fetch(dlUrl).then(r => r.text()).then(text => {
-                    content.innerHTML = `<div class="w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-inner border border-gray-100">
-                        <pre class="text-sm text-gray-800 whitespace-pre-wrap break-words font-sans leading-relaxed">${escapeHtml(text)}</pre>
-                        <button onclick="navigator.clipboard.writeText(${JSON.stringify('')}).then(()=>showMessage('<b>Kopiert!</b>'))"
-                            class="mt-4 flex items-center gap-2 text-xs font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition-colors active:scale-95"
-                            data-text="${escapeHtml(text).replace(/"/g,'&quot;')}">
-                            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Text kopieren
-                        </button>
-                    </div>`;
-                    // Fix clipboard call after render
-                    const btn = content.querySelector('button');
-                    if (btn) btn.onclick = () => navigator.clipboard.writeText(text).then(() => showMessage('<b>Text kopiert!</b>')).catch(() => {});
-                    lucide.createIcons();
-                }).catch(() => { content.innerHTML = `<p class="text-gray-400 text-sm">Fehler beim Laden.</p>`; });
-            }
-            else { content.innerHTML = `<div class="text-center p-8 sm:p-12 bg-white rounded-2xl sm:rounded-3xl shadow-inner"><i data-lucide="file-question" class="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-400"></i><p class="font-bold text-sm sm:text-base">Keine Vorschau möglich.</p></div>`; lucide.createIcons(); }
-        }
+        function previewFile(id, name, type) { openFilePreview(id, name, type); }
         function showDropNotification(bundle) {
             currentDropBundle = bundle;
             const fileCount = bundle.files.length;
